@@ -20,6 +20,7 @@
   --body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}  /* display を指定した要素でも hidden で隠れるように */
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--sky2);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;
   padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(32px,env(safe-area-inset-bottom,0px));
@@ -117,6 +118,16 @@ details .body .ans{background:var(--soft);border-radius:8px;padding:6px 8px}
 .objf textarea{font-size:14px;resize:vertical}
 .dev{background:#f4f6f9;border:2px dashed #8d99a8}
 .dev pre{font-size:11px;line-height:1.45;white-space:pre-wrap;word-break:break-all;max-height:320px;overflow:auto;background:#fff;border-radius:8px;padding:8px;margin:0}
+.ptitle{margin:0;font-family:var(--display);font-weight:900;font-size:24px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--display);font-weight:800;font-size:14px;border:2px solid var(--line);border-radius:999px;padding:4px 14px;background:var(--panel);color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--sky);color:#fff}
+.chip:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.chk{display:flex;gap:8px;align-items:center;font-weight:700;font-size:14px;cursor:pointer}
+.chk input{width:auto}
+.lv.pr{background:var(--sun)}
+.expl{background:var(--soft);border:2px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:6px;font-size:14px}
+.expl p{margin:0}
 .loading{flex:1;display:grid;place-items:center;text-align:center;color:var(--muted);font-weight:700}
 .demo{max-width:420px;margin:12px auto 0;font-size:12px;color:var(--ink);background:rgba(255,255,255,.88);border-radius:10px;padding:8px 10px;display:grid;gap:6px}
 .demo label{display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer}
@@ -399,9 +410,11 @@ function startScreen(){
        ${noLimit()?`<button class="btn sub" id="restart">テスト：最初からやり直す</button>`:""}`
       :`<button class="btn" id="go"${locked?" disabled":""}>プレイボール！</button>`}
      ${!resume&&last&&last.date===today()?`<button class="btn sub" id="see">今日の結果を見る</button>`:""}
+     <button class="btn sub" id="prac">練習モード（何回でも・1問ごとに解説）</button>
    </div></div>`;
   const on=(id,f)=>{const e=document.getElementById(id);if(e)e.onclick=f};
   on("go",deal);
+  on("prac",practiceSetup);
   on("resume",()=>{run=resume;next()});
   on("restart",()=>{clearProgress();startScreen()});
   on("see",()=>{const r=restoreRun(last);if(r)resultScreen(r)});
@@ -489,7 +502,6 @@ function qScreen(){
   let done=false;
   const tick=()=>{const left=Math.max(0,lim-(performance.now()-t0));tb.style.transform=`scaleX(${left/lim})`;
     tb.style.background=left<5000?"var(--ng)":left<lim/2?"var(--mid)":"var(--ok)";ts.textContent=Math.ceil(left/1000)+"秒";
-    const qh=document.getElementById("qh");if(qh)qh.classList.toggle("stuck",qh.getBoundingClientRect().top<=1&&window.scrollY>4);
     if(left<=0)answer(null)};
   function answer(d){
     if(done)return;done=true;clearInterval(timer);
@@ -605,19 +617,8 @@ function resultScreen(r,fresh){
   document.getElementById("back").onclick=startScreen;
   const msg=document.getElementById("msg");
   document.getElementById("share").onclick=()=>msg.textContent="画像での共有は v1.1 で入れる予定です。";
-  app.querySelectorAll("details[data-i]").forEach(d=>d.addEventListener("toggle",()=>{
-    const box=d.querySelector(".fb2");if(d.open&&box&&!box.firstChild)box.appendChild(drawField(r.items[+d.dataset.i].q));
-  }));
-  app.querySelectorAll(".dis").forEach(b=>b.onclick=()=>{const f=b.nextElementSibling;f.hidden=!f.hidden;b.setAttribute("aria-expanded",String(!f.hidden));if(!f.hidden)f.querySelector("select").focus()});
-  app.querySelectorAll(".objf").forEach(f=>f.onsubmit=ev=>{
-    ev.preventDefault();
-    const i=+f.dataset.i,btn=f.querySelector("button"),st=f.querySelector(".st");
-    const payload={type:"objection",objection:{"問題ID":r.items[i].q.id,"理由":f.querySelector("select").value,
-      "コメント":f.querySelector("textarea").value.trim(),"受験ID":r.id}};
-    btn.disabled=true;st.textContent=CFG.gasUrl?"送っています…":"";
-    sendOrQueue(payload,k=>{st.textContent=k==="ok"?"受け付けました。確認して、必要なら問題を直します。ありがとうございます！"
-      :k==="queued"?"送れませんでした。次に開いたときに自動で送ります":"開発版のため送信されません（送り先のURLが未設定）"});
-  });
+  bindReviewDiagrams(app,i=>r.items[i]);
+  bindObjForms(app,i=>r.items[i].q,r.id);
   window.scrollTo(0,0);
   if(!fresh&&CFG.gasUrl)fetchStats(sc.p).then(s=>renderRanks(r,s)).catch(()=>renderRanks(r,null));
 }
@@ -637,24 +638,161 @@ function reviewItem(it,a,i){
     <p class="ans">あなた：${mine}</p>
     ${right}
     <p>${esc(stripIds(q.explanation))}</p>
-    <button class="dis" type="button" aria-expanded="false">この答えに異議あり</button>
+    ${objFormHTML(i)}
+   </div></details>`;
+}
+
+/* =====================================================================
+   異議フォーム（診断の解説・練習の両方で使う）
+   ===================================================================== */
+function objFormHTML(i){
+  return `<button class="dis" type="button" aria-expanded="false">この答えに異議あり</button>
     <form class="objf" data-i="${i}" hidden>
      <label class="lbl" for="or${i}">理由</label>
      <select id="or${i}">${OBJ_REASONS.map(x=>`<option>${x}</option>`).join("")}</select>
      <label class="lbl" for="oc${i}">くわしく（任意・300字まで）</label>
      <textarea id="oc${i}" rows="3" maxlength="300" placeholder="例：2026年の規則改正で答えが変わったはず"></textarea>
      <button class="btn sub" type="submit">送る</button><p class="tiny st" aria-live="polite"></p>
-    </form>
-   </div></details>`;
+    </form>`;
+}
+function bindObjForms(root,qOf,attemptId){
+  root.querySelectorAll(".dis").forEach(b=>b.onclick=()=>{const f=b.nextElementSibling;f.hidden=!f.hidden;b.setAttribute("aria-expanded",String(!f.hidden));if(!f.hidden)f.querySelector("select").focus()});
+  root.querySelectorAll(".objf").forEach(f=>f.onsubmit=ev=>{
+    ev.preventDefault();
+    const btn=f.querySelector("button"),st=f.querySelector(".st");
+    const payload={type:"objection",objection:{"問題ID":qOf(+f.dataset.i).id,"理由":f.querySelector("select").value,
+      "コメント":f.querySelector("textarea").value.trim(),"受験ID":attemptId||""}};
+    btn.disabled=true;st.textContent=CFG.gasUrl?"送っています…":"";
+    sendOrQueue(payload,k=>{st.textContent=k==="ok"?"受け付けました。確認して、必要なら問題を直します。ありがとうございます！"
+      :k==="queued"?"送れませんでした。次に開いたときに自動で送ります":"開発版のため送信されません（送り先のURLが未設定）"});
+  });
+}
+/* 解説の一覧で、開いたときに図を描く */
+function bindReviewDiagrams(root,itemOf){
+  root.querySelectorAll("details[data-i]").forEach(d=>d.addEventListener("toggle",()=>{
+    const box=d.querySelector(".fb2");if(d.open&&box&&!box.firstChild)box.appendChild(drawField(itemOf(+d.dataset.i).q));
+  }));
+}
+
+/* =====================================================================
+   練習モード（何回でも。1問ごとに正解と解説。記録は送らず、YQにも入れない）
+   ===================================================================== */
+const PCFG={cats:["すべて",...CFG.order],levels:["すべて","易","中","難"],counts:[5,10,20]};
+let prac=null;
+function loadPracOpt(){try{return JSON.parse(store.get("pracOpt")||"null")}catch(e){return null}}
+const inPrac=o=>q=>(o.cat==="すべて"||q.category===o.cat)&&(o.level==="すべて"||q.level===o.level);
+
+function pickPractice(all,o,seen){
+  const pool=all.filter(inPrac(o)),isLocal=q=>q.use===CFG.localUse,fresh=q=>!seen.has(q.id);
+  const n=Math.min(o.count,pool.length),capLocal=Math.max(1,Math.floor(n/5));   // 地元クイズは5問に1問まで
+  const picked=o.pref?pool.filter(q=>isLocal(q)&&q.region===o.pref).slice(0,1):[];   // 選んだ県の地元クイズは必ず入れる
+  const rest=[...shuffle(pool.filter(q=>fresh(q)&&!picked.includes(q))),...shuffle(pool.filter(q=>!fresh(q)&&!picked.includes(q)))];
+  let locals=picked.length;
+  for(const q of rest){if(picked.length>=n)break;if(isLocal(q)){if(locals>=capLocal)continue;locals++}picked.push(q)}
+  for(const q of rest){if(picked.length>=n)break;if(!picked.includes(q))picked.push(q)}
+  const rank={"易":0,"中":1,"難":2};
+  return shuffle(picked).sort((a,b)=>rank[a.level]-rank[b.level]);              // 易→中→難の順に出す
+}
+
+function practiceSetup(){
+  clearInterval(timer);app.dataset.view="psetup";
+  const o=Object.assign({cat:"すべて",level:"すべて",count:10,timed:false,pref:store.get("pref")||""},loadPracOpt()||{});
+  const chips=(k,vals,fmt)=>`<div class="chips" role="group">${vals.map(v=>`<button type="button" class="chip" data-k="${k}" data-v="${v}" aria-pressed="${String(v)===String(o[k])}">${fmt?fmt(v):v}</button>`).join("")}</div>`;
+  app.innerHTML=`<div class="screen">
+   <h2 class="ptitle">練習モード</h2>
+   <p class="tiny">何回でも解けます。答えるたびに正解と解説が出ます。練習の成績はYQには入りません。</p>
+   <div><span class="lbl">分野</span>${chips("cat",PCFG.cats)}</div>
+   <div><span class="lbl">難易度</span>${chips("level",PCFG.levels)}</div>
+   <div><span class="lbl">問題数</span>${chips("count",PCFG.counts,v=>v+"問")}</div>
+   <div><label class="lbl" for="ppref">地元の県（その県の地元クイズを必ず入れる）</label><select id="ppref"><option value="">選ばない</option>${PREFS.map(p=>`<option${p===o.pref?" selected":""}>${p}</option>`).join("")}</select></div>
+   <label class="chk"><input type="checkbox" id="ptimed"${o.timed?" checked":""}> 本番と同じ制限時間で解く</label>
+   <p class="tiny" id="pavail"></p>
+   <div style="display:grid;gap:10px;margin-top:auto"><button class="btn" id="pgo">練習スタート</button><button class="btn sub" id="pback">スタートに戻る</button></div></div>`;
+  const avail=()=>{const n=DATA.questions.filter(inPrac(o)).length;
+    document.getElementById("pavail").textContent=`この条件の問題：${n}問${n&&n<o.count?`（${n}問すべて出します）`:""}`;document.getElementById("pgo").disabled=!n};
+  app.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const k=b.dataset.k;o[k]=k==="count"?+b.dataset.v:b.dataset.v;
+    app.querySelectorAll(`.chip[data-k="${k}"]`).forEach(x=>x.setAttribute("aria-pressed",String(x===b)));avail()});
+  avail();
+  document.getElementById("pback").onclick=startScreen;
+  document.getElementById("pgo").onclick=()=>{o.pref=document.getElementById("ppref").value;o.timed=document.getElementById("ptimed").checked;
+    store.set("pracOpt",JSON.stringify(o));startPractice(o)};
+  window.scrollTo(0,0);
+}
+
+function startPractice(o){
+  prac={opt:o,items:pickPractice(DATA.questions,o,new Set(loadSeen("pseen"))).map(q=>({q,order:shuffle([0,1,2,3])})),answers:[],i:0};
+  pqScreen();
+}
+
+function pqScreen(){
+  clearInterval(timer);app.dataset.view="pq";
+  const it=prac.items[prac.i],q=it.q,cls=CATS[q.category].cls,timed=prac.opt.timed,lim=CFG.seconds[q.category]*1000,last=prac.i===prac.items.length-1;
+  addSeen("pseen",q.id);
+  app.innerHTML=`<div class="screen">
+   <div class="qhead" id="qh">
+    <div class="top"><span class="tags"><span class="cat ${cls}">${q.category}</span><span class="lv">${q.level}</span><span class="lv pr">練習</span></span><span class="count">${prac.i+1} / ${prac.items.length}</span></div>
+    ${timed?`<div style="display:flex;gap:8px;align-items:center"><div class="tbar" style="flex:1" role="progressbar" aria-label="残り時間"><div id="tb"></div></div><span class="tsec" id="ts"></span></div>`:""}
+   </div>
+   ${hasDiagram(q)?`<div class="fieldbox" id="fb"></div>`:""}
+   ${showSit(q.situation)?`<p class="sit">${esc(q.situation)}</p>`:""}
+   <p class="qt">${esc(q.text)}</p>
+   <div class="opts">${it.order.map((o,d)=>`<button class="opt" data-d="${d}">${LABEL[d]} ${esc(q.choices[o])}</button>`).join("")}</div>
+   <p class="fbk" id="tu" aria-live="assertive"></p>
+   <div id="pexp"></div></div>`;
+  if(hasDiagram(q))document.getElementById("fb").appendChild(drawField(q));
+  window.scrollTo(0,0);
+  const t0=performance.now();let done=false;
+  function answer(d){
+    if(done)return;done=true;clearInterval(timer);
+    const orig=d===null?null:it.order[d];
+    prac.answers.push({choice:orig,shown:d,ms:Math.round(performance.now()-t0),pts:orig===null?0:q.points[orig],timeout:d===null});
+    const f=markAnswer(q,it,d),tu=document.getElementById("tu");tu.textContent=f.t;tu.className="fbk "+f.c;
+    const box=document.getElementById("pexp");
+    box.innerHTML=`<div class="expl"><b>解説</b><p>${esc(stripIds(q.explanation))}</p>${objFormHTML(prac.i)}</div>
+      <button class="btn" id="pnext" style="margin-top:12px">${last?"結果を見る":"次の問題へ"}</button>`;
+    bindObjForms(box,i=>prac.items[i].q,"");
+    document.getElementById("pnext").onclick=()=>{prac.i++;prac.i<prac.items.length?pqScreen():practiceResult()};
+    box.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+  app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.d));
+  if(timed){
+    const tb=document.getElementById("tb"),ts=document.getElementById("ts");
+    const tick=()=>{const left=Math.max(0,lim-(performance.now()-t0));tb.style.transform=`scaleX(${left/lim})`;
+      tb.style.background=left<5000?"var(--ng)":left<lim/2?"var(--mid)":"var(--ok)";ts.textContent=Math.ceil(left/1000)+"秒";
+      if(left<=0)answer(null)};
+    timer=setInterval(tick,100);tick();
+  }
+}
+
+function practiceResult(){
+  clearInterval(timer);app.dataset.view="presult";
+  const n=prac.items.length,best=i=>Math.max(...prac.items[i].q.points);
+  const right=prac.answers.filter((a,i)=>a.pts===best(i)).length;
+  app.innerHTML=`<div class="screen">
+   <div class="yq"><div class="k">練習の結果</div><div class="v" style="font-size:60px">${right}<span style="font-size:24px"> / ${n}問</span></div>
+     <div class="r">正解（プレー判断は最適）の数。練習の成績はYQには入りません</div></div>
+   <h2 class="sec" style="font-size:17px">ふりかえり</h2>
+   <div style="display:grid;gap:8px">${prac.items.map((it,i)=>reviewItem(it,prac.answers[i],i)).join("")}</div>
+   <div style="display:grid;gap:8px;margin-top:8px">
+    <button class="btn" id="pagain">同じ条件でもう一度</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn sub" id="pset">条件を変える</button><button class="btn sub" id="ptop">スタートに戻る</button></div>
+   </div></div>`;
+  bindReviewDiagrams(app,i=>prac.items[i]);
+  bindObjForms(app,i=>prac.items[i].q,"");
+  document.getElementById("pagain").onclick=()=>startPractice(prac.opt);
+  document.getElementById("pset").onclick=practiceSetup;
+  document.getElementById("ptop").onclick=startScreen;
+  window.scrollTo(0,0);
 }
 
 /* ---------- 起動 ---------- */
+window.addEventListener("scroll",()=>{const qh=document.getElementById("qh");if(qh)qh.classList.toggle("stuck",qh.getBoundingClientRect().top<=1&&window.scrollY>4)},{passive:true});
 const nl=document.getElementById("nolimit");
 nl.checked=noLimit();
 nl.onchange=()=>{store.set("noLimit",nl.checked?"1":"0");if(app.dataset.view==="start")startScreen()};
 fetch(CFG.dataUrl,{cache:"no-cache"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
   DATA=d;flushQueue();fetchStats().catch(()=>{});
-  document.getElementById("devinfo").textContent=`開発版（段階3：順位）・問題データ ${d.version}（${d.questions.length}問、${d.exported}書き出し）。${CFG.gasUrl?"記録と異議はスプレッドシートに送ります。順位はまだ表示しません。":"記録・異議の送り先が未設定のため、送信はしません。"}絵柄・球場のイラストはこのアプリ用のオリジナルです。`;
+  document.getElementById("devinfo").textContent=`開発版（段階4：練習モード）・問題データ ${d.version}（${d.questions.length}問、${d.exported}書き出し）。${CFG.gasUrl?"記録と異議はスプレッドシートに送ります。順位はまだ表示しません。":"記録・異議の送り先が未設定のため、送信はしません。"}絵柄・球場のイラストはこのアプリ用のオリジナルです。`;
   startScreen();
 }).catch(()=>{app.innerHTML=`<div class="loading">問題データを読み込めませんでした。<br>通信状態を確かめて、もう一度開いてください。</div>`});
 </script>
