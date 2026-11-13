@@ -85,6 +85,7 @@ input,select,textarea{width:100%;font:inherit;font-size:15px;padding:9px 10px;bo
 .rank{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .rank div{background:var(--chip);border:2px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12px;color:var(--muted)}
 .rank b{display:block;font-family:var(--display);font-size:14px;color:var(--ink)}
+.rank em{font-style:normal;font-family:var(--display);font-weight:900;color:var(--accent);font-size:18px;margin:0 2px}
 .bars{display:grid;gap:8px}
 .bar{display:grid;grid-template-columns:5.6em minmax(0,1fr) 3em 4.2em;gap:8px;align-items:center;font-size:13px}
 .bar .track{height:14px;border:2px solid var(--line);border-radius:8px;background:var(--soft);overflow:hidden}
@@ -181,7 +182,9 @@ function scoreRun(items,answers){
   const p=CFG.order.reduce((s,c)=>s+rate[c],0)/CFG.order.length;
   return {rate,p,per};
 }
-function toYQ(p){const y=CFG.yq;return Math.min(y.max,Math.max(y.min,Math.round(100+y.per*(p-y.center)/y.step)))}
+/* 本換算（conv＝{mean,sd}）があればそれを使い、なければ暫定の式 */
+function toYQ(p,conv){const y=CFG.yq,v=conv&&conv.sd>0?100+y.per*(p-conv.mean)/conv.sd:100+y.per*(p-y.center)/y.step;
+  return Math.min(y.max,Math.max(y.min,Math.round(v)))}
 function catchCopy(yq){
   const t=yq>=130?"日本の誇る":yq>=115?"地域の誇る":yq>=100?"平均的な":yq>=85?"未来の明るい":"これから伸びる";
   return t+"野球小僧";
@@ -472,10 +475,11 @@ function qScreen(){
 function finish(){
   clearProgress();store.set("firstDone","1");
   saveLastRun(run);
-  resultScreen(run);
-  const st=document.getElementById("sendst"),sc=scoreRun(run.items,run.answers);
+  const r=run;resultScreen(r,true);
+  const st=document.getElementById("sendst"),sc=scoreRun(r.items,r.answers);
   st.textContent=SEND_MSG[CFG.gasUrl?"sending":"off"];
-  sendOrQueue(buildRecord(run,sc,toYQ(sc.p)),k=>{st.textContent=SEND_MSG[k]});
+  sendOrQueue(buildRecord(r,sc,toYQ(sc.p,convOf())),k=>{st.textContent=SEND_MSG[k];
+    if(CFG.gasUrl)fetchStats(sc.p).then(s=>renderRanks(r,s)).catch(()=>renderRanks(r,null))});
 }
 function saveLastRun(r){
   store.set("lastRun",JSON.stringify({id:r.id,startedAt:r.startedAt,date:r.date,nick:r.nick,pref:r.pref,version:r.version,first:r.first,test:r.test,
@@ -513,14 +517,37 @@ function sendOrQueue(payload,done){
   postGas(payload).then(()=>done&&done("ok")).catch(()=>{const q=queue.load();q.push(payload);queue.save(q);done&&done("queued")});
 }
 function flushQueue(){if(!CFG.gasUrl)return;const q=queue.load();if(!q.length)return;queue.save([]);q.forEach(p=>sendOrQueue(p))}
+/* ---------- 集計（受験者数・県の順位・上位◯%・本換算）をGASから読む ---------- */
+let STATS=null;
+const convOf=k=>STATS&&STATS.conv?STATS.conv[k||"all"]:null;
+function fetchStats(p){
+  if(!CFG.gasUrl)return Promise.reject(new Error("off"));
+  return fetch(CFG.gasUrl+(p!=null?"?p="+encodeURIComponent(Math.round(p*1000)/1000):""))
+    .then(res=>res.json()).then(j=>{if(!j.ok||typeof j.n!=="number")throw new Error("no stats");STATS=j;return j});
+}
+function renderRanks(r,s){
+  const nat=document.getElementById("rk-nat"),pref=document.getElementById("rk-pref");
+  if(!nat)return;
+  if(!s){nat.innerHTML="<b>全国の順位</b>集計を読み込めませんでした";
+    if(r.pref)pref.innerHTML=`<b>${esc(r.pref)}の順位</b>集計を読み込めませんでした`;return}
+  nat.innerHTML=s.n<s.goal?`<b>全国の順位</b>あと<em>${s.goal-s.n}</em>人で公開`
+    :`<b>全国の順位</b>上位<em>${s.top??"－"}</em>%<br>${s.n}人中`;
+  if(r.pref){
+    const f=(s.prefs||[]).find(x=>x.name===r.pref),n=f?f.n:0;
+    pref.innerHTML=n<s.prefGoal||!f.rank?`<b>${esc(r.pref)}の順位</b>あと<em>${s.prefGoal-n}</em>人で公開`
+      :`<b>${esc(r.pref)}の順位</b><em>${f.rank}</em>位／${s.prefRanked}県<br>平均YQ ${f.avg}（${n}人）`;
+  }
+}
+
 const SEND_MSG={off:"開発版：記録は送っていません（送り先のURLが未設定）",sending:"記録を送っています…",ok:"記録しました",
   queued:"記録を送れませんでした。次に開いたときに自動で送ります"};
 
-function resultScreen(r){
+function resultScreen(r,fresh){
   clearInterval(timer);app.dataset.view="result";
-  const sc=scoreRun(r.items,r.answers),yq=toYQ(sc.p),rec=buildRecord(r,sc,yq);
+  const conv=convOf(),sc=scoreRun(r.items,r.answers),yq=toYQ(sc.p,conv),rec=buildRecord(r,sc,yq);
   const total=Math.round(r.answers.reduce((s,a)=>s+a.ms,0)/1000);
-  const prefBox=r.pref?`<div><b>${esc(r.pref)}の順位</b>受験の記録がつながったら表示</div>`:`<div><b>県の順位</b>都道府県を選ぶと参加できます</div>`;
+  const wait=CFG.gasUrl?"集計を読み込み中…":"受験の記録がつながったら表示";
+  const prefBox=r.pref?`<div id="rk-pref"><b>${esc(r.pref)}の順位</b>${wait}</div>`:`<div id="rk-pref"><b>県の順位</b>都道府県を選ぶと参加できます</div>`;
   const review=CFG.order.map(cat=>{
     const rows=r.items.map((it,i)=>({it,i})).filter(x=>x.it.q.category===cat);
     return `<h3 class="sec"><span class="dot" style="background:${CATS[cat].color}"></span>${cat}</h3>
@@ -529,9 +556,10 @@ function resultScreen(r){
   app.innerHTML=`<div class="screen">
    <div class="yq"><div class="k">${r.nick?esc(r.nick)+" の ":""}YQ</div><div class="v">${yq}</div>
      <div class="c">${catchCopy(yq)}</div>
-     <div class="r">暫定値（受験者が100人に達したら正式な値に更新）</div></div>
-   <div class="rank"><div><b>全国の順位</b>受験の記録がつながったら表示</div>${prefBox}</div>
-   <div class="bars">${CFG.order.map(c=>{const v=sc.rate[c];return `<div class="bar"><span>${c}</span><div class="track"><div class="fill" style="width:${v*100}%;background:${CATS[c].color}"></div></div><span class="num">${Math.round(v*100)}%</span><span class="yqn">YQ ${toYQ(v)}</span></div>`}).join("")}</div>
+     <div class="r">${conv?`初回受験${STATS.conv.n}人のデータで換算したYQ`:"暫定値（受験者が100人に達したら正式な値に更新）"}</div></div>
+   <div class="rank"><div id="rk-nat"><b>全国の順位</b>${wait}</div>${prefBox}</div>
+   ${r.test||!r.first?`<p class="tiny">${r.test?"テスト受験":"2回目以降の受験"}は、順位の人数には数えません。</p>`:""}
+   <div class="bars">${CFG.order.map(c=>{const v=sc.rate[c];return `<div class="bar"><span>${c}</span><div class="track"><div class="fill" style="width:${v*100}%;background:${CATS[c].color}"></div></div><span class="num">${Math.round(v*100)}%</span><span class="yqn">YQ ${toYQ(v,convOf(c))}</span></div>`}).join("")}</div>
    <p class="tiny">得点率は難易度の重み（易1・中1.5・難2）をかけたもの。合計時間 ${Math.floor(total/60)}分${total%60}秒${r.test?"・テスト受験":""}</p>
    <h2 class="sec" style="font-size:17px">解説</h2>
    ${review}
@@ -558,6 +586,7 @@ function resultScreen(r){
       :k==="queued"?"送れませんでした。次に開いたときに自動で送ります":"開発版のため送信されません（送り先のURLが未設定）"});
   });
   window.scrollTo(0,0);
+  if(!fresh&&CFG.gasUrl)fetchStats(sc.p).then(s=>renderRanks(r,s)).catch(()=>renderRanks(r,null));
 }
 
 function reviewItem(it,a,i){
@@ -591,8 +620,8 @@ const nl=document.getElementById("nolimit");
 nl.checked=noLimit();
 nl.onchange=()=>{store.set("noLimit",nl.checked?"1":"0");if(app.dataset.view==="start")startScreen()};
 fetch(CFG.dataUrl,{cache:"no-cache"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
-  DATA=d;flushQueue();
-  document.getElementById("devinfo").textContent=`開発版（段階2：記録）・問題データ ${d.version}（${d.questions.length}問、${d.exported}書き出し）。${CFG.gasUrl?"記録と異議はスプレッドシートに送ります。順位はまだ表示しません。":"記録・異議の送り先が未設定のため、送信はしません。"}絵柄・球場のイラストはこのアプリ用のオリジナルです。`;
+  DATA=d;flushQueue();fetchStats().catch(()=>{});
+  document.getElementById("devinfo").textContent=`開発版（段階3：順位）・問題データ ${d.version}（${d.questions.length}問、${d.exported}書き出し）。${CFG.gasUrl?"記録と異議はスプレッドシートに送ります。順位はまだ表示しません。":"記録・異議の送り先が未設定のため、送信はしません。"}絵柄・球場のイラストはこのアプリ用のオリジナルです。`;
   startScreen();
 }).catch(()=>{app.innerHTML=`<div class="loading">問題データを読み込めませんでした。<br>通信状態を確かめて、もう一度開いてください。</div>`});
 </script>
