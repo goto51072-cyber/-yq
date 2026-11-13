@@ -133,7 +133,7 @@ const CFG={
   levels:["易","中","難"],                         // 各分野の中は易→中→難
   slots:{"易":3,"中":4,"難":3},                    // 各分野10問
   weight:{"易":1,"中":1.5,"難":2},                 // 難易度の重み
-  seconds:{"歴史":20,"ルール":20,"プレー判断":40}, // 制限時間
+  seconds:{"歴史":20,"ルール":30,"プレー判断":40}, // 制限時間（ルールは図を見るので30秒）
   diagUses:["診断・練習","診断（1問まで）・練習"],   // 「練習のみ」は出さない
   localUse:"診断（1問まで）・練習",                // 地元クイズ：1回1問まで、約3割（全体を1問ぶんとして抽選）
   yq:{center:.55,step:.18,per:15,min:55,max:145}   // 暫定YQ：55%＝100、18ポイントごとに±15
@@ -363,39 +363,59 @@ function focusFirst(sel){const e=app.querySelector(sel);if(e)e.focus({preventScr
 
 function startScreen(){
   clearInterval(timer);app.dataset.view="start";
-  const locked=lockedToday(),last=loadLastRun();
+  const prog=loadProgress(),resume=prog&&prog.date===today()?restoreRun(prog):null;
+  if(prog&&!resume)clearProgress();               // 前の日の途中・問題データが変わった途中は捨てる
+  const locked=lockedToday()&&!resume,last=loadLastRun();
   const prevNick=store.get("nick")||"",prevPref=store.get("pref")||"";
+  const done=resume?resume.answers.length:0;
   app.innerHTML=`<div class="screen">
    <div class="hero">${heroSVG()}<div class="ttl"><h1><small>HIGH SCHOOL BASEBALL</small><br>高校野球 <span class="hy">YQ</span>診断</h1><p>あなたの「野球の頭」を数値で測ります</p></div></div>
-   <div class="rules"><div><b>30問</b>3分野×10問</div><div><b>20秒</b>歴史・ルール</div><div><b>40秒</b>プレー判断</div></div>
+   <div class="rules">${CFG.order.map(c=>`<div><b>${CFG.seconds[c]}秒</b>${c}</div>`).join("")}</div>
+   ${resume?`<p class="notice">途中の診断があります${done?`（${done}問まで解答済み）`:""}。続きから再開できます。表示中だった問題は、閉じていた時間も制限時間に数えます。</p>`:`
    <div><label class="lbl" for="nick">ニックネーム（任意・結果画面にだけ表示）</label><input id="nick" maxlength="12" placeholder="例：ショートの鬼" value="${esc(prevNick)}" autocomplete="off"></div>
    <div><label class="lbl" for="pref">都道府県（任意・県対抗ランキング用）</label><select id="pref"><option value="">選ばない</option>${PREFS.map(p=>`<option${p===prevPref?" selected":""}>${p}</option>`).join("")}</select></div>
-   <p class="tiny">本名や学校名は入れないでください。正解と解説は、最後にまとめて表示されます。診断は1日1回です。</p>
+   <p class="tiny">全30問（3分野×10問）。本名や学校名は入れないでください。正解と解説は、最後にまとめて表示されます。診断は1日1回で、途中で閉じても同じ日なら続きから再開できます。</p>`}
    ${locked?`<p class="notice">今日の診断は受験済みです。また明日どうぞ。</p>`:""}
    <div style="display:grid;gap:10px;margin-top:auto">
-     <button class="btn" id="go"${locked?" disabled":""}>プレイボール！</button>
-     ${last&&last.date===today()?`<button class="btn sub" id="see">今日の結果を見る</button>`:""}
+     ${resume?`<button class="btn" id="resume">続きから（${Math.min(done+1,30)}問目から）</button>
+       ${noLimit()?`<button class="btn sub" id="restart">テスト：最初からやり直す</button>`:""}`
+      :`<button class="btn" id="go"${locked?" disabled":""}>プレイボール！</button>`}
+     ${!resume&&last&&last.date===today()?`<button class="btn sub" id="see">今日の結果を見る</button>`:""}
    </div></div>`;
-  document.getElementById("go").onclick=deal;
-  const see=document.getElementById("see");if(see)see.onclick=()=>{const r=restoreRun(last);if(r)resultScreen(r)};
+  const on=(id,f)=>{const e=document.getElementById(id);if(e)e.onclick=f};
+  on("go",deal);
+  on("resume",()=>{run=resume;next()});
+  on("restart",()=>{clearProgress();startScreen()});
+  on("see",()=>{const r=restoreRun(last);if(r)resultScreen(r)});
 }
+
+/* 途中の診断を端末に残す（閉じても同じ日なら続きから） */
+function saveProgress(){
+  if(!run)return;
+  store.set("progress",JSON.stringify({id:run.id,startedAt:run.startedAt,date:run.date,nick:run.nick,pref:run.pref,version:run.version,
+    first:run.first,test:run.test,items:run.items.map(it=>({id:it.q.id,order:it.order})),answers:run.answers,i:run.i,shownAt:run.shownAt||null}));
+}
+function loadProgress(){try{return JSON.parse(store.get("progress")||"null")}catch(e){return null}}
+function clearProgress(){store.set("progress","")}
 
 function deal(){
   if(lockedToday())return startScreen();
   const nick=document.getElementById("nick").value.trim(),pref=document.getElementById("pref").value;
   store.set("nick",nick);store.set("pref",pref);
+  // 「初回」＝最後まで解き終えた最初の受験。問題が配られた時点で「今日の1回」とする
   const first=store.get("firstDone")!=="1";
-  // 問題が配られた時点で「今日の1回」とする（途中でやめて引き直すのを防ぐ）
-  store.set("lastDate",today());store.set("firstDone","1");
+  store.set("lastDate",today());
   run={id:rid(8),startedAt:nowStr(),date:today(),nick,pref,version:DATA.version,first,test:noLimit(),
-       items:pickDiagnosis(DATA.questions).map(q=>({q,order:shuffle([0,1,2,3])})),answers:[],i:0};
+       items:pickDiagnosis(DATA.questions).map(q=>({q,order:shuffle([0,1,2,3])})),answers:[],i:0,shownAt:null};
+  saveProgress();
   next();
 }
 
 function next(){
   if(run.i>=run.items.length)return finish();
   const q=run.items[run.i].q,prev=run.i>0?run.items[run.i-1].q:null;
-  if(!prev||prev.category!==q.category)introScreen(q.category);else qScreen();
+  // 再開したとき、表示中だった問題はそのまま続ける（扉は出さない）
+  if(!run.shownAt&&(!prev||prev.category!==q.category))introScreen(q.category);else qScreen();
 }
 
 function introScreen(cat){
@@ -406,7 +426,7 @@ function introScreen(cat){
     <h2 class="bg-${CATS[cat].cls}">${cat}</h2>
     <div class="facts"><span>${n}問</span><span>1問${CFG.seconds[cat]}秒</span><span>易→中→難</span></div>
     <p>${CATS[cat].desc}</p>
-   </div><button class="btn" id="begin">${idx===1?"はじめる":"つづける"}</button></div>`;
+   </div><button class="btn" id="begin">${run.i===0?"はじめる":"つづける"}</button></div>`;
   document.getElementById("begin").onclick=qScreen;
   focusFirst("#begin");
 }
@@ -414,6 +434,12 @@ function introScreen(cat){
 function qScreen(){
   app.dataset.view="q";
   const it=run.items[run.i],q=it.q,cls=CATS[q.category].cls,lim=CFG.seconds[q.category]*1000;
+  if(!run.shownAt){run.shownAt=Date.now();saveProgress()}
+  const already=Math.max(0,Date.now()-run.shownAt);
+  if(already>=lim){                                   // 閉じている間に制限時間を過ぎた → 時間切れ
+    run.answers.push({choice:null,shown:null,ms:lim,pts:0,timeout:true});
+    run.i++;run.shownAt=null;saveProgress();return next();
+  }
   app.innerHTML=`<div class="screen">
    <div class="top"><span class="tags"><span class="cat ${cls}">${q.category}</span><span class="lv">${q.level}</span></span><span class="count">${run.i+1} / ${run.items.length}</span></div>
    <div style="display:flex;gap:8px;align-items:center"><div class="tbar" style="flex:1" role="progressbar" aria-label="残り時間" aria-valuemin="0" aria-valuemax="${lim/1000}"><div id="tb"></div></div><span class="tsec" id="ts"></span></div>
@@ -424,7 +450,7 @@ function qScreen(){
    <p class="timeup" id="tu" aria-live="assertive"></p></div>`;
   if(hasDiagram(q))document.getElementById("fb").appendChild(drawField(q));
   window.scrollTo(0,0);
-  const t0=performance.now(),tb=document.getElementById("tb"),ts=document.getElementById("ts");
+  const t0=performance.now()-already,tb=document.getElementById("tb"),ts=document.getElementById("ts");
   let done=false;
   const tick=()=>{const left=Math.max(0,lim-(performance.now()-t0));tb.style.transform=`scaleX(${left/lim})`;
     tb.style.background=left<5000?"var(--ng)":left<lim/2?"var(--mid)":"var(--ok)";ts.textContent=Math.ceil(left/1000)+"秒";
@@ -433,9 +459,10 @@ function qScreen(){
     if(done)return;done=true;clearInterval(timer);
     const ms=Math.min(lim,Math.round(performance.now()-t0)),orig=d===null?null:it.order[d];
     run.answers.push({choice:orig,shown:d,ms,pts:orig===null?0:q.points[orig],timeout:d===null});
+    run.i++;run.shownAt=null;saveProgress();
     app.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(+b.dataset.d===d)b.classList.add("pick")});
     if(d===null)document.getElementById("tu").textContent="時間切れ！";
-    setTimeout(()=>{run.i++;next()},d===null?900:300);
+    setTimeout(next,d===null?900:300);
   }
   app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.d));
   clearInterval(timer);timer=setInterval(tick,100);tick();
@@ -443,6 +470,7 @@ function qScreen(){
 
 /* ---------- 終了：結果を保存して表示 ---------- */
 function finish(){
+  clearProgress();store.set("firstDone","1");
   saveLastRun(run);
   resultScreen(run);
   const st=document.getElementById("sendst"),sc=scoreRun(run.items,run.answers);
