@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>高校野球YQ 診断（開発版）</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800;900&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+/* 夏の球場を背景に、中央にスマホ幅のアプリ。明るい単一テーマ（お試し版のデザインを引き継ぎ） */
+:root{
+  color-scheme:light;
+  --sky2:#c8ecff; --app:#ffffff; --panel:#ffffff; --soft:#eef7ff;
+  --ink:#16304f; --muted:#5d7391; --line:#16304f;
+  --sun:#ffb000; --accent:#ff6a1a; --accent-ink:#ffffff; --sky:#1f8fff; --chip:#e6f4ff; --hist:#8a5cf6;
+  --board:#1f4d3a; --ok:#18a957; --mid:#f0a000; --ng:#e5384f;
+  --display:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--sky2);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;
+  padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(32px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));position:relative}
+.scene{position:fixed;inset:0;z-index:0;pointer-events:none}
+.scene svg{width:100%;height:100%;display:block}
+.phone,.demo{position:relative;z-index:1}
+.phone{max-width:420px;margin:0 auto;background:var(--app);border:4px solid var(--line);border-radius:26px;overflow:hidden;box-shadow:0 8px 0 var(--line),0 18px 40px rgba(22,48,79,.25);min-height:640px;display:flex;flex-direction:column}
+.screen{display:flex;flex-direction:column;gap:12px;padding:16px;flex:1}
+.btn{font-family:var(--display);font-weight:900;font-size:18px;border:3px solid var(--line);border-radius:14px;background:var(--accent);color:var(--accent-ink);padding:12px;cursor:pointer;box-shadow:0 5px 0 var(--line);width:100%}
+.btn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--line)}
+.btn:disabled{background:#cfd8e3;color:var(--muted);cursor:default;transform:none;box-shadow:0 5px 0 var(--line)}
+.btn.sub{background:var(--panel);color:var(--ink);font-size:14px;padding:8px}
+.btn:focus-visible,.opt:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,.dis:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+/* スタート */
+.hero{position:relative;border-radius:18px;border:3px solid var(--line);overflow:hidden;background:#8fd3ff}
+.hero svg{display:block;width:100%;height:auto}
+.hero .ttl{position:absolute;top:50%;left:0;right:0;transform:translateY(-46%);text-align:center;padding:0 12px}
+.hero h1{margin:0;font-family:var(--display);font-weight:900;font-size:clamp(28px,8.4vw,36px);line-height:1.08;letter-spacing:.03em;color:#fff;
+  text-shadow:0 3px 0 #16304f,2px 0 0 #16304f,-2px 0 0 #16304f,0 -2px 0 #16304f,2px 2px 0 #16304f,-2px 2px 0 #16304f,2px -2px 0 #16304f,-2px -2px 0 #16304f,0 8px 14px rgba(22,48,79,.35)}
+.hero h1 small{display:inline-block;font-size:11px;color:#16304f;background:#ffd23f;border:2px solid #16304f;border-radius:999px;padding:1px 10px;letter-spacing:.18em;margin-bottom:8px;text-shadow:none}
+.hero h1 .hy{color:#ffd23f}
+.hero p{display:inline-block;margin:10px 0 0;font-size:12.5px;color:#16304f;font-weight:700;background:rgba(255,255,255,.88);border-radius:999px;padding:2px 12px}
+.lbl{font-family:var(--display);font-weight:800;font-size:12px;color:var(--muted);letter-spacing:.06em;display:block;margin-bottom:3px}
+input,select,textarea{width:100%;font:inherit;font-size:15px;padding:9px 10px;border:2px solid var(--line);border-radius:10px;background:var(--soft);color:var(--ink)}
+.rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center}
+.rules div{background:var(--chip);border:2px solid var(--line);border-radius:12px;padding:8px 4px;font-size:12px;color:var(--muted)}
+.rules b{display:block;font-family:var(--display);font-size:19px;color:var(--ink)}
+.tiny{font-size:12px;color:var(--muted);margin:0}
+.notice{background:#fff6dc;border:2px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px;font-weight:700;margin:0}
+/* 分野の扉 */
+.intro{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:10px}
+.intro .no{font-family:var(--display);font-weight:900;font-size:13px;letter-spacing:.2em;color:var(--muted)}
+.intro h2{margin:0;font-family:var(--display);font-weight:900;font-size:40px;line-height:1.1;padding:6px 22px;border:4px solid var(--line);border-radius:18px;color:#fff;box-shadow:0 6px 0 var(--line)}
+.intro .facts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.intro .facts span{background:var(--chip);border:2px solid var(--line);border-radius:999px;padding:2px 12px;font-family:var(--display);font-weight:800;font-size:14px}
+.intro p{margin:0;max-width:30em;color:var(--muted);font-size:14px}
+/* 問題 */
+.top{display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:900}
+.tags{display:flex;gap:6px;align-items:center}
+.cat{font-size:12px;padding:2px 10px;border-radius:999px;border:2px solid var(--line);color:#fff}
+.cat.rule,.bg-rule{background:var(--sky)}.cat.play,.bg-play{background:var(--accent)}.cat.hist,.bg-hist{background:var(--hist)}
+.lv{font-size:11px;padding:1px 8px;border-radius:999px;border:2px solid var(--line);background:var(--panel)}
+.count{font-size:15px;font-variant-numeric:tabular-nums}
+.tbar{height:12px;border:2px solid var(--line);border-radius:7px;overflow:hidden;background:var(--soft)}
+.tbar div{height:100%;background:var(--ok);transform-origin:left}
+.tsec{font-family:var(--display);font-weight:900;font-variant-numeric:tabular-nums;font-size:14px;min-width:3.2em;text-align:right}
+.fieldbox{border:3px solid var(--line);border-radius:16px;overflow:hidden;background:#dfe6ee}
+.fieldbox svg{display:block;width:100%;height:auto}
+.sit{background:var(--chip);border-radius:10px;padding:6px 10px;font-weight:700;font-size:13.5px;margin:0}
+.qt{font-weight:700;font-size:16px;margin:0}
+.opts{display:grid;gap:8px;margin-top:auto}
+.opt{text-align:left;font-family:var(--body);font-weight:700;font-size:15px;border:3px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:10px 12px;cursor:pointer;box-shadow:0 4px 0 var(--line)}
+.opt:active,.opt.pick{transform:translateY(3px);box-shadow:0 1px 0 var(--line);background:var(--sun);color:var(--ink)}
+.opt:disabled{cursor:default}
+.timeup{text-align:center;font-family:var(--display);font-weight:900;color:var(--ng);font-size:18px;margin:0;min-height:1.6em}
+/* 結果 */
+.yq{background:var(--board);color:#fff;border:3px solid var(--line);border-radius:18px;text-align:center;padding:16px 12px 14px;position:relative}
+.yq::before{content:"";position:absolute;inset:6px;border:2px solid rgba(255,255,255,.18);border-radius:12px;pointer-events:none}
+.yq .k{font-family:var(--display);font-weight:800;color:var(--sun);letter-spacing:.12em;font-size:13px}
+.yq .v{font-family:var(--display);font-weight:900;font-size:76px;line-height:1;font-variant-numeric:tabular-nums}
+.yq .c{display:inline-block;margin-top:6px;font-family:var(--display);font-weight:900;font-size:17px;color:#16304f;background:#ffd23f;border-radius:999px;padding:2px 14px}
+.yq .r{font-size:12px;color:#cfe8da;margin-top:6px}
+.rank{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rank div{background:var(--chip);border:2px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12px;color:var(--muted)}
+.rank b{display:block;font-family:var(--display);font-size:14px;color:var(--ink)}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:5.6em minmax(0,1fr) 3em 4.2em;gap:8px;align-items:center;font-size:13px}
+.bar .track{height:14px;border:2px solid var(--line);border-radius:8px;background:var(--soft);overflow:hidden}
+.bar .fill{height:100%}
+.bar .num{font-family:var(--display);font-weight:900;text-align:right;font-variant-numeric:tabular-nums}
+.bar .yqn{font-family:var(--display);font-weight:900;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
+.sec{font-family:var(--display);font-weight:900;font-size:15px;margin:6px 0 0;display:flex;align-items:center;gap:8px}
+.sec .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--line)}
+details{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:8px 10px}
+summary{cursor:pointer;font-weight:700;display:flex;gap:8px;align-items:flex-start;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary .s{min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13.5px}
+.pt{font-family:var(--display);font-weight:900;font-size:12px;padding:1px 8px;border-radius:999px;color:#fff;white-space:nowrap;margin-top:1px}
+.pt.g{background:var(--ok)}.pt.m{background:var(--mid)}.pt.n{background:var(--ng)}
+details .body{font-size:13.5px;margin-top:8px;display:grid;gap:6px}
+details .body p{margin:0}
+details .body .ans{background:var(--soft);border-radius:8px;padding:6px 8px}
+.dis{color:var(--sky);background:none;border:none;padding:0;cursor:pointer;text-align:left;font:inherit;font-size:12.5px;text-decoration:underline;justify-self:start}
+.objf{display:grid;gap:6px;background:var(--soft);border-radius:10px;padding:8px}
+.objf textarea{font-size:14px;resize:vertical}
+.dev{background:#f4f6f9;border:2px dashed #8d99a8}
+.dev pre{font-size:11px;line-height:1.45;white-space:pre-wrap;word-break:break-all;max-height:320px;overflow:auto;background:#fff;border-radius:8px;padding:8px;margin:0}
+.loading{flex:1;display:grid;place-items:center;text-align:center;color:var(--muted);font-weight:700}
+.demo{max-width:420px;margin:12px auto 0;font-size:12px;color:var(--ink);background:rgba(255,255,255,.88);border-radius:10px;padding:8px 10px;display:grid;gap:6px}
+.demo label{display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer}
+.demo input{width:auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="scene" id="scene" aria-hidden="true"></div>
+<main class="phone" id="app"><div class="loading">問題データを読み込み中…</div></main>
+<div class="demo">
+  <div id="devinfo">開発版。絵柄・球場のイラストはこのアプリ用のオリジナルです。</div>
+  <label><input type="checkbox" id="nolimit"> テスト中：1日1回の制限を外す（この受験は「テスト受験」として扱う）</label>
+</div>
+
+<script>
+/* =====================================================================
+   設定（開発仕様 2026-11-13 の決定どおり）
+   ===================================================================== */
+const CFG={
+  dataUrl:"questions.json",
+  gasUrl:"https://script.google.com/macros/s/AKfycbyL9zC6oPrNUlI9BBzxakzQPS_TljJvSWMM6tn4Q4XfKijLBivJFMbLc8mlyqba9nzF4w/exec",                                       // GASのウェブアプリのURL（空なら記録を送らない）
+  order:["歴史","ルール","プレー判断"],            // 出題順：分野ごとにまとめる
+  levels:["易","中","難"],                         // 各分野の中は易→中→難
+  slots:{"易":3,"中":4,"難":3},                    // 各分野10問
+  weight:{"易":1,"中":1.5,"難":2},                 // 難易度の重み
+  seconds:{"歴史":20,"ルール":20,"プレー判断":40}, // 制限時間
+  diagUses:["診断・練習","診断（1問まで）・練習"],   // 「練習のみ」は出さない
+  localUse:"診断（1問まで）・練習",                // 地元クイズ：1回1問まで、約3割（全体を1問ぶんとして抽選）
+  yq:{center:.55,step:.18,per:15,min:55,max:145}   // 暫定YQ：55%＝100、18ポイントごとに±15
+};
+const CATS={"歴史":{cls:"hist",color:"var(--hist)",desc:"大会の記録や歴代の名勝負から出題。"},
+            "ルール":{cls:"rule",color:"var(--sky)",desc:"公認野球規則と高校野球特別規則から出題。"},
+            "プレー判断":{cls:"play",color:"var(--accent)",desc:"図を見て、いちばん良いプレーを選ぶ。最適3点・次善1点。"}};
+const LABEL="①②③④";
+const OBJ_REASONS=["正解が違う","状況が曖昧","ルール改正された","その他"];
+
+/*LOGIC-START*/
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function sample(a){return a.length?a[Math.floor(Math.random()*a.length)]:null}
+
+/* 30問の選び方 */
+function pickDiagnosis(all){
+  const pool=all.filter(q=>CFG.diagUses.includes(q.use));
+  const usedGroups=new Set(),out=[];
+  const ok=q=>!q.group||!usedGroups.has(q.group);
+  for(const cat of CFG.order)for(const lv of CFG.levels){
+    const need=CFG.slots[lv],cand=pool.filter(q=>q.category===cat&&q.level===lv);
+    const normal=cand.filter(q=>q.use!==CFG.localUse),local=cand.filter(q=>q.use===CFG.localUse);
+    // 地元クイズはまとめて「1問ぶん」の札にして混ぜる（3枠なら約3割で1問入る）
+    const deck=shuffle([...normal.map(q=>({q})),...(local.length?[{local:true}]:[])]);
+    const picked=[];
+    for(const card of deck){
+      if(picked.length===need)break;
+      const q=card.local?sample(local.filter(ok)):card.q;
+      if(!q||!ok(q))continue;
+      picked.push(q);if(q.group)usedGroups.add(q.group);
+    }
+    // 対比グループで足りなくなったときだけ、制約を外して補う（今のデータでは起きない）
+    for(const q of shuffle(normal))if(picked.length<need&&!picked.includes(q))picked.push(q);
+    out.push(...picked);
+  }
+  return out;
+}
+
+/* 採点：分野ごとに 難易度の重み付き得点率 → 3分野の平均 */
+function scoreRun(items,answers){
+  const per={};CFG.order.forEach(c=>per[c]={got:0,max:0,n:0});
+  items.forEach((it,i)=>{const q=it.q,w=CFG.weight[q.level],a=answers[i];
+    per[q.category].max+=Math.max(...q.points)*w;per[q.category].got+=(a?a.pts:0)*w;per[q.category].n++});
+  const rate={};CFG.order.forEach(c=>rate[c]=per[c].max?per[c].got/per[c].max:0);
+  const p=CFG.order.reduce((s,c)=>s+rate[c],0)/CFG.order.length;
+  return {rate,p,per};
+}
+function toYQ(p){const y=CFG.yq;return Math.min(y.max,Math.max(y.min,Math.round(100+y.per*(p-y.center)/y.step)))}
+function catchCopy(yq){
+  const t=yq>=130?"日本の誇る":yq>=115?"地域の誇る":yq>=100?"平均的な":yq>=85?"未来の明るい":"これから伸びる";
+  return t+"野球小僧";
+}
+/* 解説の中の問題ID（例：「（H-007）」）は表示するときに消す */
+function stripIds(s){return String(s||"").replace(/\s*[（(]\s*[RPH]-\d{3}\s*[）)]/g,"").replace(/[RPH]-\d{3}/g,"")}
+/*LOGIC-END*/
+
+/* =====================================================================
+   端末に残すもの（ログインなし。1日1回と初回の判定だけ）
+   ===================================================================== */
+const store={get(k){try{return localStorage.getItem("yq."+k)}catch(e){return null}},
+             set(k,v){try{localStorage.setItem("yq."+k,v)}catch(e){}}};
+const pad=n=>String(n).padStart(2,"0");
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`};
+const nowStr=()=>{const d=new Date();return `${today()} ${pad(d.getHours())}:${pad(d.getMinutes())}`};
+function rid(n){const a=new Uint8Array(n);(window.crypto||{getRandomValues:x=>x.map(()=>Math.random()*256|0)}).getRandomValues(a);return Array.from(a,b=>b.toString(16).padStart(2,"0")).join("")}
+let memDevice=null;
+function deviceId(){let id=store.get("deviceId");if(!id){id=memDevice||rid(8);store.set("deviceId",id);memDevice=id}return id}
+const noLimit=()=>store.get("noLimit")==="1";
+const lockedToday=()=>store.get("lastDate")===today()&&!noLimit();
+
+/* =====================================================================
+   絵（お試し版のオリジナルイラストを流用）
+   ===================================================================== */
+function cloud(cx,by,s){
+  const c=[[0,0,34],[-38,8,26],[38,8,26],[-18,-28,28],[20,-30,30],[0,-58,30],[-26,-62,20],[24,-70,22],[2,-92,24]];
+  return `<g transform="translate(${cx} ${by}) scale(${s})">${c.map(([x,y,r])=>`<circle cx="${x}" cy="${y+3}" r="${r}" fill="#d7e8f6"/>`).join("")}${c.map(([x,y,r])=>`<circle cx="${x-2}" cy="${y}" r="${r}" fill="#ffffff"/>`).join("")}</g>`;
+}
+function heroSVG(){
+  const VP={x:200,y:118},stripes=[];
+  for(let i=-10;i<=10;i++){if(i%2)continue;const x1=200+i*70,x2=200+(i+1)*70;
+    stripes.push(`<path d="M${VP.x} ${VP.y} L${x1} 270 L${x2} 270 Z" fill="#3fb44c" opacity=".55"/>`);}
+  return `<svg viewBox="0 92 400 172" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="夏の青空と入道雲の下の球場を、バックネット越しに見た絵">
+  <defs>
+   <linearGradient id="s2sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#127ff0"/><stop offset=".55" stop-color="#5dbcff"/><stop offset="1" stop-color="#d9f2ff"/></linearGradient>
+   <radialGradient id="s2sun" cx="88%" cy="6%" r="55%"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".25" stop-color="#fff7d1" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+   <linearGradient id="s2stand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9eff5"/><stop offset="1" stop-color="#c5d1dd"/></linearGradient>
+   <linearGradient id="s2turf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fd46a"/><stop offset="1" stop-color="#36a843"/></linearGradient>
+   <linearGradient id="s2soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6e503c"/><stop offset="1" stop-color="#4b3527"/></linearGradient>
+   <pattern id="s2ivy" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#2a7232"/><circle cx="1.5" cy="1.5" r="1.8" fill="#3a8c41"/><circle cx="4.5" cy="4.5" r="1.8" fill="#44994b"/></pattern>
+   <pattern id="s2net" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0 H9 M0 0 V9" stroke="#ffffff" stroke-width=".6" fill="none"/></pattern>
+   <radialGradient id="s2vig" cx="50%" cy="45%" r="75%"><stop offset=".6" stop-color="#0b1d33" stop-opacity="0"/><stop offset="1" stop-color="#0b1d33" stop-opacity=".35"/></radialGradient>
+   <clipPath id="s2field"><rect x="0" y="146" width="400" height="124"/></clipPath>
+  </defs>
+  <rect width="400" height="270" fill="url(#s2sky)"/><rect width="400" height="270" fill="url(#s2sun)"/>
+  <g opacity=".98">${cloud(48,150,1.35)}${cloud(372,146,1.15)}${cloud(250,140,.55)}</g>
+  <rect x="0" y="122" width="400" height="20" fill="url(#s2stand)"/>
+  <g stroke="#aebccb" stroke-width=".7" opacity=".7">${[126,130,134,138].map(y=>`<line x1="0" y1="${y}" x2="400" y2="${y}"/>`).join("")}</g>
+  <rect x="34" y="124" width="40" height="16" fill="#ffd23f" opacity=".45"/><rect x="326" y="124" width="40" height="16" fill="#6fb6ff" opacity=".45"/>
+  <line x1="380" y1="96" x2="380" y2="146" stroke="#ffd23f" stroke-width="2.2"/><line x1="20" y1="96" x2="20" y2="146" stroke="#ffd23f" stroke-width="2.2"/>
+  <rect x="0" y="141" width="400" height="1.6" fill="#ffd23f"/><rect x="0" y="142.6" width="400" height="9" fill="url(#s2ivy)"/>
+  <rect x="0" y="151.6" width="400" height="4" fill="#5b4232"/><rect x="0" y="155.6" width="400" height="115" fill="url(#s2turf)"/>
+  <g clip-path="url(#s2field)">${stripes.join("")}</g>
+  <path d="M200 272 L6 204 Q200 158 394 204 Z" fill="url(#s2soil)"/>
+  <path d="M200 236 L302 202 L200 180 L98 202 Z" fill="#4cc957" stroke="#4a3528" stroke-width=".8"/>
+  <ellipse cx="200" cy="201" rx="17" ry="5" fill="#5e4535" stroke="#4a3528" stroke-width=".8"/><rect x="196" y="200" width="8" height="1.4" fill="#fff"/>
+  <line x1="200" y1="252" x2="-30" y2="172" stroke="#fff" stroke-width="1.8"/><line x1="200" y1="252" x2="430" y2="172" stroke="#fff" stroke-width="1.8"/>
+  ${[[304,201],[200,178],[96,201]].map(([x,y])=>`<path d="M${x-5.5} ${y} L${x} ${y-2.3} L${x+5.5} ${y} L${x} ${y+2.3} Z" fill="#fff" stroke="#16304f" stroke-width=".6"/>`).join("")}
+  <g opacity=".9"><rect x="178" y="244" width="13" height="12" fill="none" stroke="#fff" stroke-width="1"/><rect x="209" y="244" width="13" height="12" fill="none" stroke="#fff" stroke-width="1"/></g>
+  <path d="M195 251 h10 v2.2 l-5 2.6 l-5 -2.6 Z" fill="#fff" stroke="#16304f" stroke-width=".7"/>
+  <rect width="400" height="270" fill="url(#s2net)" opacity=".22"/><rect width="400" height="270" fill="url(#s2vig)"/>
+  </svg>`;
+}
+function stadiumSVG(){
+  return `<svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f9dff"/><stop offset="1" stop-color="#cdeeff"/></linearGradient>
+    <pattern id="bgcrowd" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="#eef2f7"/><circle cx="4" cy="4" r="2.2" fill="#ff9a9a"/><circle cx="11" cy="10" r="2.2" fill="#9bcfff"/></pattern>
+    <pattern id="bgivy" width="26" height="22" patternUnits="userSpaceOnUse"><rect width="26" height="22" fill="#2f7a36"/><circle cx="6" cy="6" r="6" fill="#3f9446"/><circle cx="19" cy="9" r="7" fill="#368a3d"/><circle cx="11" cy="17" r="6" fill="#4aa451"/><circle cx="24" cy="20" r="4" fill="#3f9446"/></pattern>
+    <pattern id="bgturf" width="80" height="80" patternUnits="userSpaceOnUse"><rect width="80" height="80" fill="#4cc957"/><rect width="40" height="80" fill="#42bd4d"/></pattern>
+  </defs>
+  <rect width="1200" height="800" fill="url(#bgsky)"/>
+  ${cloud(170,470,2.6)}${cloud(1040,450,2.2)}${cloud(600,430,1.2)}
+  <rect x="0" y="470" width="1200" height="80" fill="url(#bgcrowd)"/>
+  <rect x="90" y="476" width="150" height="68" fill="#ffd23f" opacity=".8"/><rect x="960" y="476" width="150" height="68" fill="#7cc4ff" opacity=".85"/>
+  <rect x="0" y="546" width="1200" height="6" fill="#ffd23f"/><rect x="0" y="552" width="1200" height="78" fill="url(#bgivy)"/>
+  <rect x="0" y="630" width="1200" height="50" fill="#5e4535"/><rect x="0" y="680" width="1200" height="120" fill="url(#bgturf)"/>
+  </svg>`;
+}
+document.getElementById("scene").innerHTML=stadiumSVG();
+
+/* =====================================================================
+   グラウンド図：問題データの diagram（走者・打球位置・打球の種類・守備位置・注目する野手）から描く
+   ===================================================================== */
+const H={x:200,y:380},D=85,S=D/27.43,rad=a=>a*Math.PI/180;
+const P=(deg,r)=>({x:H.x+r*Math.sin(rad(deg)),y:H.y-r*Math.cos(rad(deg))});
+const B1={x:H.x+D*Math.SQRT1_2,y:H.y-D*Math.SQRT1_2},B2={x:H.x,y:H.y-D*Math.SQRT2},B3={x:H.x-D*Math.SQRT1_2,y:H.y-D*Math.SQRT1_2};
+const FENCE=96*S;
+const ZONES={"投手前":[0,10],"三塁線":[-42,26],"三遊間・浅":[-24,26],"三遊間・深":[-24,38],"遊撃正面":[-12,36],"二遊間":[0,38],"二塁正面":[13,36],"一二塁間・浅":[24,26],"一二塁間・深":[24,38],"一塁線":[42,26],"左翼線":[-43,72],"左翼前":[-27,55],"左中間":[-16,80],"中堅前":[0,60],"中堅後方":[0,90],"右中間":[16,80],"右翼前":[27,55],"右翼線":[43,72],"左翼フェンス際":[-27,93],"右翼フェンス際":[27,93]};
+const FIELDERS={"投":[0,18.4],"一":[38,30],"二":[14,40],"遊":[-14,40],"三":[-38,30],"左":[-28,82],"中":[0,90],"右":[28,82]};
+const SHORT={"投手":"投","捕手":"捕","一塁手":"一","二塁手":"二","三塁手":"三","遊撃手":"遊","左翼手":"左","中堅手":"中","右翼手":"右"};
+const INF={"通常":1,"中間":.88,"前進":.72},OUT={"通常":1,"前進":.82,"後退":1.07};
+const NS="http://www.w3.org/2000/svg";
+let uidN=0;
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e}
+function arcSeg(r,a2){const p=P(a2,r);return `A${r},${r} 0 0 1 ${p.x},${p.y}`}
+function player(g,pos,label,fill,tf){
+  el("ellipse",{cx:pos.x,cy:pos.y+8,rx:9,ry:3.2,fill:"rgba(0,0,0,.25)"},g);
+  el("circle",{cx:pos.x,cy:pos.y,r:10.5,fill,stroke:"#16304f","stroke-width":2.6},g);
+  el("circle",{cx:pos.x-3.2,cy:pos.y-3.4,r:3,fill:"rgba(255,255,255,.6)"},g);
+  const t=el("text",{x:pos.x,y:pos.y+4.3,"text-anchor":"middle","font-family":"M PLUS Rounded 1c, sans-serif","font-weight":900,"font-size":12,fill:tf},g);t.textContent=label;
+}
+function runnersOf(s){s=s||"";return[s.includes("一"),s.includes("二"),s.includes("三")]}
+/* 図を描くかどうか：プレー判断は全部、ルールは走者がいる問題だけ */
+function hasDiagram(q){
+  if(!q.diagram)return false;
+  if(q.category==="プレー判断")return true;
+  if(q.category==="ルール")return runnersOf(q.diagram.runners).some(Boolean);
+  return false;
+}
+function drawField(q){
+  const dg=q.diagram||{},u="f"+(++uidN),rule=q.category!=="プレー判断";
+  const s={r:runnersOf(dg.runners),zone:rule?null:dg.ball,kind:rule?null:dg.kind,inf:dg.infield||"通常",outf:dg.outfield||"通常",focus:rule?null:SHORT[dg.focus]||null};
+  const label=["グラウンド図"];
+  const rs=["一塁","二塁","三塁"].filter((_,i)=>s.r[i]);label.push(rs.length?"走者"+rs.join("・"):"走者なし");
+  if(s.zone&&s.kind&&s.kind!=="なし")label.push(`打球：${s.zone}への${s.kind}`);
+  if(s.inf!=="通常")label.push(`内野${s.inf}守備`);if(s.outf!=="通常")label.push(`外野${s.outf}守備`);
+  if(s.focus)label.push(`注目：${dg.focus}`);
+  const svg=el("svg",{viewBox:"-30 60 460 345",role:"img","aria-label":label.join("、")});
+  const defs=el("defs",{},svg);
+  const pat=el("pattern",{id:"mow"+u,width:28,height:28,patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"},defs);
+  el("rect",{width:28,height:28,fill:"#4cc957"},pat);el("rect",{width:14,height:28,fill:"#40bb4b"},pat);
+  const ivy=el("pattern",{id:"ivy"+u,width:10,height:10,patternUnits:"userSpaceOnUse"},defs);
+  el("rect",{width:10,height:10,fill:"#2f7a36"},ivy);el("circle",{cx:3,cy:3,r:3,fill:"#3f9446"},ivy);el("circle",{cx:8,cy:7,r:3,fill:"#4aa451"},ivy);
+  const seats=el("pattern",{id:"seat"+u,width:8,height:8,patternUnits:"userSpaceOnUse"},defs);
+  el("rect",{width:8,height:8,fill:"#e9eef4"},seats);el("circle",{cx:2,cy:2,r:1.4,fill:"#ff8a8a"},seats);el("circle",{cx:6,cy:5,r:1.4,fill:"#7fbfff"},seats);
+  el("rect",{x:-30,y:60,width:460,height:345,fill:`url(#seat${u})`},svg);
+  const L=P(-45,FENCE),R=P(45,FENCE);
+  el("path",{d:`M${L.x},${L.y} ${arcSeg(FENCE,45)}`,fill:"none",stroke:`url(#ivy${u})`,"stroke-width":16},svg);
+  el("path",{d:`M${H.x},${H.y} L${L.x},${L.y} ${arcSeg(FENCE,45)} Z`,fill:`url(#mow${u})`,stroke:"#16304f","stroke-width":2},svg);
+  const ir=29*S,il=P(-45,ir);
+  el("path",{d:`M${H.x},${H.y} L${il.x},${il.y} ${arcSeg(ir,45)} Z`,fill:"#5e4535",stroke:"#16304f","stroke-width":2.2},svg);
+  const g=D*.78,gc={x:H.x,y:H.y-D*.72},h=g/1.414;
+  el("path",{d:`M${gc.x},${gc.y-h} L${gc.x+h},${gc.y} L${gc.x},${gc.y+h} L${gc.x-h},${gc.y} Z`,fill:`url(#mow${u})`,stroke:"#4a3528","stroke-width":1.5},svg);
+  el("circle",{cx:H.x,cy:H.y,r:13,fill:"#5e4535",stroke:"#4a3528","stroke-width":1.5},svg);
+  const M=P(0,18.4*S);el("circle",{cx:M.x,cy:M.y,r:9,fill:"#5e4535",stroke:"#4a3528","stroke-width":1.5},svg);
+  el("rect",{x:M.x-4,y:M.y-1,width:8,height:2,fill:"#fff"},svg);
+  el("line",{x1:H.x,y1:H.y,x2:L.x,y2:L.y,stroke:"#fff","stroke-width":2.4},svg);
+  el("line",{x1:H.x,y1:H.y,x2:R.x,y2:R.y,stroke:"#fff","stroke-width":2.4},svg);
+  [L,R].forEach(p=>el("line",{x1:p.x,y1:p.y,x2:p.x,y2:p.y-26,stroke:"#ffd23f","stroke-width":3.5,"stroke-linecap":"round"},svg));
+  [B1,B2,B3].forEach(b=>el("rect",{x:b.x-4.5,y:b.y-4.5,width:9,height:9,fill:"#fff",stroke:"#16304f","stroke-width":1.6,transform:`rotate(45 ${b.x} ${b.y})`},svg));
+  el("path",{d:`M${H.x-5},${H.y-4} h10 v4 l-5,5 l-5,-5 Z`,fill:"#fff",stroke:"#16304f","stroke-width":1.6},svg);
+  const dyn=el("g",{},svg);
+  if(s.zone&&ZONES[s.zone]&&s.kind&&s.kind!=="なし"){
+    const [a,m]=ZONES[s.zone],end=P(a,m*S);
+    let d=`M${H.x},${H.y-4} L${end.x},${end.y}`,extra={};
+    if(s.kind==="フライ"){const mid=P(a,m*S*.5);d=`M${H.x},${H.y-4} Q${mid.x},${mid.y-m*S*.55} ${end.x},${end.y}`;extra={"stroke-dasharray":"6 5"}}
+    el("path",{d,fill:"none",stroke:"#fff","stroke-width":s.kind==="ライナー"?4.5:3,"stroke-linecap":"round",...extra},dyn);
+    if(s.kind==="ゴロ")for(let i=1;i<4;i++){const p=P(a,m*S*i/4);el("circle",{cx:p.x,cy:p.y,r:2.4,fill:"#fff",stroke:"#16304f","stroke-width":1},dyn)}
+    if(s.kind==="フライ")el("ellipse",{cx:end.x,cy:end.y+9,rx:7,ry:2.5,fill:"rgba(0,0,0,.3)"},dyn);
+    el("circle",{cx:end.x,cy:end.y,r:6.5,fill:"#fff",stroke:"#16304f","stroke-width":2},dyn);
+    el("path",{d:`M${end.x-3},${end.y-4} q2,4 0,8 M${end.x+3},${end.y-4} q-2,4 0,8`,fill:"none",stroke:"#e5384f","stroke-width":1.3},dyn);
+  }
+  const inf=INF[s.inf]||1,out=OUT[s.outf]||1;
+  const put=(k,pos)=>{const f=s.focus===k;
+    if(f)el("circle",{cx:pos.x,cy:pos.y,r:15,fill:"none",stroke:"#ffd23f","stroke-width":3.5},dyn);
+    player(dyn,pos,k,f?"#ffd23f":"#1f8fff",f?"#16304f":"#fff")};
+  for(const k in FIELDERS){let [a,m]=FIELDERS[k];if("一二遊三".includes(k))m*=inf;if("左中右".includes(k))m*=out;put(k,P(a,m*S))}
+  put("捕",{x:H.x,y:H.y+14});
+  player(dyn,{x:H.x-14,y:H.y-2},"打","#ff6a1a","#fff");
+  const lead=(b,n,f)=>({x:b.x+(n.x-b.x)*f,y:b.y+(n.y-b.y)*f});
+  if(s.r[0])player(dyn,lead(B1,B2,.18),"走","#ff6a1a","#fff");
+  if(s.r[1])player(dyn,lead(B2,B3,.16),"走","#ff6a1a","#fff");
+  if(s.r[2])player(dyn,lead(B3,H,.14),"走","#ff6a1a","#fff");
+  return svg;
+}
+
+/* =====================================================================
+   画面
+   ===================================================================== */
+const app=document.getElementById("app");
+const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const showSit=s=>s&&s!=="－"&&s!=="-";
+const PREFS="北海道 青森 岩手 宮城 秋田 山形 福島 茨城 栃木 群馬 埼玉 千葉 東京 神奈川 新潟 富山 石川 福井 山梨 長野 岐阜 静岡 愛知 三重 滋賀 京都 大阪 兵庫 奈良 和歌山 鳥取 島根 岡山 広島 山口 徳島 香川 愛媛 高知 福岡 佐賀 長崎 熊本 大分 宮崎 鹿児島 沖縄".split(" ");
+let DATA=null,run=null,timer=null;
+
+function focusFirst(sel){const e=app.querySelector(sel);if(e)e.focus({preventScroll:true});window.scrollTo(0,0)}
+
+function startScreen(){
+  clearInterval(timer);app.dataset.view="start";
+  const locked=lockedToday(),last=loadLastRun();
+  const prevNick=store.get("nick")||"",prevPref=store.get("pref")||"";
+  app.innerHTML=`<div class="screen">
+   <div class="hero">${heroSVG()}<div class="ttl"><h1><small>HIGH SCHOOL BASEBALL</small><br>高校野球 <span class="hy">YQ</span>診断</h1><p>あなたの「野球の頭」を数値で測ります</p></div></div>
+   <div class="rules"><div><b>30問</b>3分野×10問</div><div><b>20秒</b>歴史・ルール</div><div><b>40秒</b>プレー判断</div></div>
+   <div><label class="lbl" for="nick">ニックネーム（任意・結果画面にだけ表示）</label><input id="nick" maxlength="12" placeholder="例：ショートの鬼" value="${esc(prevNick)}" autocomplete="off"></div>
+   <div><label class="lbl" for="pref">都道府県（任意・県対抗ランキング用）</label><select id="pref"><option value="">選ばない</option>${PREFS.map(p=>`<option${p===prevPref?" selected":""}>${p}</option>`).join("")}</select></div>
+   <p class="tiny">本名や学校名は入れないでください。正解と解説は、最後にまとめて表示されます。診断は1日1回です。</p>
+   ${locked?`<p class="notice">今日の診断は受験済みです。また明日どうぞ。</p>`:""}
+   <div style="display:grid;gap:10px;margin-top:auto">
+     <button class="btn" id="go"${locked?" disabled":""}>プレイボール！</button>
+     ${last&&last.date===today()?`<button class="btn sub" id="see">今日の結果を見る</button>`:""}
+   </div></div>`;
+  document.getElementById("go").onclick=deal;
+  const see=document.getElementById("see");if(see)see.onclick=()=>{const r=restoreRun(last);if(r)resultScreen(r)};
+}
+
+function deal(){
+  if(lockedToday())return startScreen();
+  const nick=document.getElementById("nick").value.trim(),pref=document.getElementById("pref").value;
+  store.set("nick",nick);store.set("pref",pref);
+  const first=store.get("firstDone")!=="1";
+  // 問題が配られた時点で「今日の1回」とする（途中でやめて引き直すのを防ぐ）
+  store.set("lastDate",today());store.set("firstDone","1");
+  run={id:rid(8),startedAt:nowStr(),date:today(),nick,pref,version:DATA.version,first,test:noLimit(),
+       items:pickDiagnosis(DATA.questions).map(q=>({q,order:shuffle([0,1,2,3])})),answers:[],i:0};
+  next();
+}
+
+function next(){
+  if(run.i>=run.items.length)return finish();
+  const q=run.items[run.i].q,prev=run.i>0?run.items[run.i-1].q:null;
+  if(!prev||prev.category!==q.category)introScreen(q.category);else qScreen();
+}
+
+function introScreen(cat){
+  clearInterval(timer);app.dataset.view="intro";
+  const n=run.items.filter(it=>it.q.category===cat).length,idx=CFG.order.indexOf(cat)+1;
+  app.innerHTML=`<div class="screen"><div class="intro">
+    <div class="no">第${idx}章／全3章</div>
+    <h2 class="bg-${CATS[cat].cls}">${cat}</h2>
+    <div class="facts"><span>${n}問</span><span>1問${CFG.seconds[cat]}秒</span><span>易→中→難</span></div>
+    <p>${CATS[cat].desc}</p>
+   </div><button class="btn" id="begin">${idx===1?"はじめる":"つづける"}</button></div>`;
+  document.getElementById("begin").onclick=qScreen;
+  focusFirst("#begin");
+}
+
+function qScreen(){
+  app.dataset.view="q";
+  const it=run.items[run.i],q=it.q,cls=CATS[q.category].cls,lim=CFG.seconds[q.category]*1000;
+  app.innerHTML=`<div class="screen">
+   <div class="top"><span class="tags"><span class="cat ${cls}">${q.category}</span><span class="lv">${q.level}</span></span><span class="count">${run.i+1} / ${run.items.length}</span></div>
+   <div style="display:flex;gap:8px;align-items:center"><div class="tbar" style="flex:1" role="progressbar" aria-label="残り時間" aria-valuemin="0" aria-valuemax="${lim/1000}"><div id="tb"></div></div><span class="tsec" id="ts"></span></div>
+   ${hasDiagram(q)?`<div class="fieldbox" id="fb"></div>`:""}
+   ${showSit(q.situation)?`<p class="sit">${esc(q.situation)}</p>`:""}
+   <p class="qt">${esc(q.text)}</p>
+   <div class="opts">${it.order.map((o,d)=>`<button class="opt" data-d="${d}">${LABEL[d]} ${esc(q.choices[o])}</button>`).join("")}</div>
+   <p class="timeup" id="tu" aria-live="assertive"></p></div>`;
+  if(hasDiagram(q))document.getElementById("fb").appendChild(drawField(q));
+  window.scrollTo(0,0);
+  const t0=performance.now(),tb=document.getElementById("tb"),ts=document.getElementById("ts");
+  let done=false;
+  const tick=()=>{const left=Math.max(0,lim-(performance.now()-t0));tb.style.transform=`scaleX(${left/lim})`;
+    tb.style.background=left<5000?"var(--ng)":left<lim/2?"var(--mid)":"var(--ok)";ts.textContent=Math.ceil(left/1000)+"秒";
+    if(left<=0)answer(null)};
+  function answer(d){
+    if(done)return;done=true;clearInterval(timer);
+    const ms=Math.min(lim,Math.round(performance.now()-t0)),orig=d===null?null:it.order[d];
+    run.answers.push({choice:orig,shown:d,ms,pts:orig===null?0:q.points[orig],timeout:d===null});
+    app.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(+b.dataset.d===d)b.classList.add("pick")});
+    if(d===null)document.getElementById("tu").textContent="時間切れ！";
+    setTimeout(()=>{run.i++;next()},d===null?900:300);
+  }
+  app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.d));
+  clearInterval(timer);timer=setInterval(tick,100);tick();
+}
+
+/* ---------- 終了：結果を保存して表示 ---------- */
+function finish(){
+  saveLastRun(run);
+  resultScreen(run);
+  const st=document.getElementById("sendst"),sc=scoreRun(run.items,run.answers);
+  st.textContent=SEND_MSG[CFG.gasUrl?"sending":"off"];
+  sendOrQueue(buildRecord(run,sc,toYQ(sc.p)),k=>{st.textContent=SEND_MSG[k]});
+}
+function saveLastRun(r){
+  store.set("lastRun",JSON.stringify({id:r.id,startedAt:r.startedAt,date:r.date,nick:r.nick,pref:r.pref,version:r.version,first:r.first,test:r.test,
+    items:r.items.map(it=>({id:it.q.id,order:it.order})),answers:r.answers}));
+}
+function loadLastRun(){try{return JSON.parse(store.get("lastRun")||"null")}catch(e){return null}}
+function restoreRun(s){
+  if(!s||!DATA)return null;
+  const byId=Object.fromEntries(DATA.questions.map(q=>[q.id,q]));
+  if(s.items.some(it=>!byId[it.id]))return null;
+  return {...s,items:s.items.map(it=>({q:byId[it.id],order:it.order}))};
+}
+
+/* GASに送る「受験」「回答」の中身。項目名はスプレッドシートの見出しとそろえる（日時はGAS側で入れ直す） */
+function buildRecord(r,sc,yq){
+  const round=x=>Math.round(x*1000)/1000,total=r.answers.reduce((s,a)=>s+a.ms,0)/1000;
+  return {type:"attempt",
+    attempt:{"受験ID":r.id,"日時":r.startedAt,"端末ID":deviceId(),"初回":r.first?"はい":"いいえ","ニックネーム":r.nick,"都道府県":r.pref,"問題データの版":r.version,
+      "得点率（歴史）":round(sc.rate["歴史"]),"得点率（ルール）":round(sc.rate["ルール"]),"得点率（プレー判断）":round(sc.rate["プレー判断"]),
+      "全体の得点率":round(sc.p),"暫定YQ":yq,"合計時間（秒）":Math.round(total),"テスト受験":r.test?"はい":"いいえ"},
+    answers:r.items.map((it,i)=>{const a=r.answers[i];return{"表示順":i+1,"問題ID":it.q.id,
+      "選んだ選択肢":a.choice===null?"":LABEL[a.choice],"得点":a.pts,"回答秒数":Math.round(a.ms/100)/10,"時間切れ":a.timeout?"はい":"いいえ"}})
+  };
+}
+
+/* ---------- GASへの送信（失敗したら端末に残して、次に開いたときに送り直す） ---------- */
+function postGas(payload){
+  return fetch(CFG.gasUrl,{method:"POST",body:JSON.stringify(payload)})
+    .then(res=>res.json()).then(j=>{if(!j.ok)throw new Error(j.error||"error");return j});
+}
+const queue={load(){try{return JSON.parse(store.get("pending")||"[]")}catch(e){return[]}},
+             save(a){store.set("pending",JSON.stringify(a.slice(-20)))}};
+function sendOrQueue(payload,done){
+  if(!CFG.gasUrl){done&&done("off");return}
+  postGas(payload).then(()=>done&&done("ok")).catch(()=>{const q=queue.load();q.push(payload);queue.save(q);done&&done("queued")});
+}
+function flushQueue(){if(!CFG.gasUrl)return;const q=queue.load();if(!q.length)return;queue.save([]);q.forEach(p=>sendOrQueue(p))}
+const SEND_MSG={off:"開発版：記録は送っていません（送り先のURLが未設定）",sending:"記録を送っています…",ok:"記録しました",
+  queued:"記録を送れませんでした。次に開いたときに自動で送ります"};
+
+function resultScreen(r){
+  clearInterval(timer);app.dataset.view="result";
+  const sc=scoreRun(r.items,r.answers),yq=toYQ(sc.p),rec=buildRecord(r,sc,yq);
+  const total=Math.round(r.answers.reduce((s,a)=>s+a.ms,0)/1000);
+  const prefBox=r.pref?`<div><b>${esc(r.pref)}の順位</b>受験の記録がつながったら表示</div>`:`<div><b>県の順位</b>都道府県を選ぶと参加できます</div>`;
+  const review=CFG.order.map(cat=>{
+    const rows=r.items.map((it,i)=>({it,i})).filter(x=>x.it.q.category===cat);
+    return `<h3 class="sec"><span class="dot" style="background:${CATS[cat].color}"></span>${cat}</h3>
+     <div style="display:grid;gap:8px">${rows.map(({it,i})=>reviewItem(it,r.answers[i],i)).join("")}</div>`;
+  }).join("");
+  app.innerHTML=`<div class="screen">
+   <div class="yq"><div class="k">${r.nick?esc(r.nick)+" の ":""}YQ</div><div class="v">${yq}</div>
+     <div class="c">${catchCopy(yq)}</div>
+     <div class="r">暫定値（受験者が100人に達したら正式な値に更新）</div></div>
+   <div class="rank"><div><b>全国の順位</b>受験の記録がつながったら表示</div>${prefBox}</div>
+   <div class="bars">${CFG.order.map(c=>{const v=sc.rate[c];return `<div class="bar"><span>${c}</span><div class="track"><div class="fill" style="width:${v*100}%;background:${CATS[c].color}"></div></div><span class="num">${Math.round(v*100)}%</span><span class="yqn">YQ ${toYQ(v)}</span></div>`}).join("")}</div>
+   <p class="tiny">得点率は難易度の重み（易1・中1.5・難2）をかけたもの。合計時間 ${Math.floor(total/60)}分${total%60}秒${r.test?"・テスト受験":""}</p>
+   <h2 class="sec" style="font-size:17px">解説</h2>
+   ${review}
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+     <button class="btn sub" id="back">スタートに戻る</button><button class="btn sub" id="share">結果を画像で共有</button></div>
+   <p class="tiny" id="msg" aria-live="polite"></p>
+   <p class="tiny" id="sendst" aria-live="polite"></p>
+   <details class="dev"><summary>開発用：記録されるデータ（段階2でスプレッドシートに送る中身）</summary><pre>${esc(JSON.stringify(rec,null,1))}</pre></details>
+  </div>`;
+  document.getElementById("back").onclick=startScreen;
+  const msg=document.getElementById("msg");
+  document.getElementById("share").onclick=()=>msg.textContent="画像での共有は v1.1 で入れる予定です。";
+  app.querySelectorAll("details[data-i]").forEach(d=>d.addEventListener("toggle",()=>{
+    const box=d.querySelector(".fb2");if(d.open&&box&&!box.firstChild)box.appendChild(drawField(r.items[+d.dataset.i].q));
+  }));
+  app.querySelectorAll(".dis").forEach(b=>b.onclick=()=>{const f=b.nextElementSibling;f.hidden=!f.hidden;b.setAttribute("aria-expanded",String(!f.hidden));if(!f.hidden)f.querySelector("select").focus()});
+  app.querySelectorAll(".objf").forEach(f=>f.onsubmit=ev=>{
+    ev.preventDefault();
+    const i=+f.dataset.i,btn=f.querySelector("button"),st=f.querySelector(".st");
+    const payload={type:"objection",objection:{"問題ID":r.items[i].q.id,"理由":f.querySelector("select").value,
+      "コメント":f.querySelector("textarea").value.trim(),"受験ID":r.id}};
+    btn.disabled=true;st.textContent=CFG.gasUrl?"送っています…":"";
+    sendOrQueue(payload,k=>{st.textContent=k==="ok"?"受け付けました。確認して、必要なら問題を直します。ありがとうございます！"
+      :k==="queued"?"送れませんでした。次に開いたときに自動で送ります":"開発版のため送信されません（送り先のURLが未設定）"});
+  });
+  window.scrollTo(0,0);
+}
+
+function reviewItem(it,a,i){
+  const q=it.q,mx=Math.max(...q.points),best=q.points.indexOf(mx),sub=q.points.findIndex(p=>p>0&&p<mx);
+  const cls=a.pts===mx?"g":a.pts>0?"m":"n",lab=o=>LABEL[it.order.indexOf(o)];
+  const mine=a.timeout?"時間切れ（0点）":`${LABEL[a.shown]} ${esc(q.choices[a.choice])}（${(a.ms/1000).toFixed(1)}秒）`;
+  const right=q.category==="プレー判断"
+    ?`<p><b>最適（3点）：${lab(best)} ${esc(q.choices[best])}</b>${sub>=0?`<br>次善（1点）：${lab(sub)} ${esc(q.choices[sub])}`:""}</p>`
+    :`<p><b>正解：${lab(best)} ${esc(q.choices[best])}</b></p>`;
+  return `<details data-i="${i}"><summary><span class="pt ${cls}">${a.pts}/${mx}点</span><span class="s">${i+1}. ${esc(q.text)}</span></summary>
+   <div class="body">
+    ${hasDiagram(q)?`<div class="fieldbox fb2"></div>`:""}
+    ${showSit(q.situation)?`<p class="sit">${esc(q.situation)}</p>`:""}
+    <p>${esc(q.text)}</p>
+    <p class="ans">あなた：${mine}</p>
+    ${right}
+    <p>${esc(stripIds(q.explanation))}</p>
+    <button class="dis" type="button" aria-expanded="false">この答えに異議あり</button>
+    <form class="objf" data-i="${i}" hidden>
+     <label class="lbl" for="or${i}">理由</label>
+     <select id="or${i}">${OBJ_REASONS.map(x=>`<option>${x}</option>`).join("")}</select>
+     <label class="lbl" for="oc${i}">くわしく（任意・300字まで）</label>
+     <textarea id="oc${i}" rows="3" maxlength="300" placeholder="例：2026年の規則改正で答えが変わったはず"></textarea>
+     <button class="btn sub" type="submit">送る</button><p class="tiny st" aria-live="polite"></p>
+    </form>
+   </div></details>`;
+}
+
+/* ---------- 起動 ---------- */
+const nl=document.getElementById("nolimit");
+nl.checked=noLimit();
+nl.onchange=()=>{store.set("noLimit",nl.checked?"1":"0");if(app.dataset.view==="start")startScreen()};
+fetch(CFG.dataUrl,{cache:"no-cache"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
+  DATA=d;flushQueue();
+  document.getElementById("devinfo").textContent=`開発版（段階2：記録）・問題データ ${d.version}（${d.questions.length}問、${d.exported}書き出し）。${CFG.gasUrl?"記録と異議はスプレッドシートに送ります。順位はまだ表示しません。":"記録・異議の送り先が未設定のため、送信はしません。"}絵柄・球場のイラストはこのアプリ用のオリジナルです。`;
+  startScreen();
+}).catch(()=>{app.innerHTML=`<div class="loading">問題データを読み込めませんでした。<br>通信状態を確かめて、もう一度開いてください。</div>`});
+</script>
+</body>
+</html>
