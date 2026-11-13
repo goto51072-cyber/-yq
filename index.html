@@ -77,7 +77,13 @@ input,select,textarea{width:100%;font:inherit;font-size:15px;padding:9px 10px;bo
 .opt{text-align:left;font-family:var(--body);font-weight:700;font-size:15px;border:3px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:10px 12px;cursor:pointer;box-shadow:0 4px 0 var(--line)}
 .opt:active,.opt.pick{transform:translateY(3px);box-shadow:0 1px 0 var(--line);background:var(--sun);color:var(--ink)}
 .opt:disabled{cursor:default}
-.timeup{text-align:center;font-family:var(--display);font-weight:900;color:var(--ng);font-size:18px;margin:0;min-height:1.6em}
+/* 答えた直後の○×：正解（最適）は緑、次善は黄、選んだ誤りは赤 */
+.opt.ok{background:#d3f4e1}.opt.so{background:#fff0bf}.opt.ng{background:#ffd5db}
+.opt.pick{outline:3px solid var(--ink);outline-offset:1px}
+.opt .tag{display:inline-block;margin-left:6px;font-family:var(--display);font-weight:900;font-size:11.5px;padding:0 8px;border-radius:999px;color:#fff;vertical-align:1px}
+.opt.ok .tag{background:var(--ok)}.opt.so .tag{background:var(--mid)}
+.fbk{text-align:center;font-family:var(--display);font-weight:900;font-size:21px;margin:0;min-height:1.6em}
+.fbk.g{color:var(--ok)}.fbk.m{color:var(--mid)}.fbk.n{color:var(--ng)}
 /* 結果 */
 .yq{background:var(--board);color:#fff;border:3px solid var(--line);border-radius:18px;text-align:center;padding:16px 12px 14px;position:relative}
 .yq::before{content:"";position:absolute;inset:6px;border:2px solid rgba(255,255,255,.18);border-radius:12px;pointer-events:none}
@@ -152,26 +158,29 @@ const OBJ_REASONS=["正解が違う","状況が曖昧","ルール改正された
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function sample(a){return a.length?a[Math.floor(Math.random()*a.length)]:null}
 
-/* 30問の選び方 */
-function pickDiagnosis(all){
+/* 30問の選び方。seen（その端末で前に出た問題のID）は後回しにして、まだ見ていない問題から選ぶ */
+function pickDiagnosis(all,seen){
+  seen=seen||new Set();
   const pool=all.filter(q=>CFG.diagUses.includes(q.use));
   const usedGroups=new Set(),out=[];
-  const ok=q=>!q.group||!usedGroups.has(q.group);
+  const ok=q=>!q.group||!usedGroups.has(q.group),fresh=q=>!seen.has(q.id);
   for(const cat of CFG.order)for(const lv of CFG.levels){
     const need=CFG.slots[lv],cand=pool.filter(q=>q.category===cat&&q.level===lv);
     const normal=cand.filter(q=>q.use!==CFG.localUse),local=cand.filter(q=>q.use===CFG.localUse);
+    const localFresh=local.filter(fresh);
     // 地元クイズはまとめて「1問ぶん」の札にして混ぜる（3枠なら約3割で1問入る）
-    const deck=shuffle([...normal.map(q=>({q})),...(local.length?[{local:true}]:[])]);
+    const cards=[...normal.map(q=>({q,old:!fresh(q)})),...(local.length?[{local:true,old:!localFresh.length}]:[])];
+    const deck=[...shuffle(cards.filter(c=>!c.old)),...shuffle(cards.filter(c=>c.old))];
     const picked=[];
     for(const card of deck){
       if(picked.length===need)break;
-      const q=card.local?sample(local.filter(ok)):card.q;
+      const q=card.local?(sample(localFresh.filter(ok))||sample(local.filter(ok))):card.q;
       if(!q||!ok(q))continue;
       picked.push(q);if(q.group)usedGroups.add(q.group);
     }
     // 対比グループで足りなくなったときだけ、制約を外して補う（今のデータでは起きない）
     for(const q of shuffle(normal))if(picked.length<need&&!picked.includes(q))picked.push(q);
-    out.push(...picked);
+    out.push(...shuffle(picked));
   }
   return out;
 }
@@ -208,6 +217,9 @@ function rid(n){const a=new Uint8Array(n);(window.crypto||{getRandomValues:x=>x.
 let memDevice=null;
 function deviceId(){let id=store.get("deviceId");if(!id){id=memDevice||rid(8);store.set("deviceId",id);memDevice=id}return id}
 const noLimit=()=>store.get("noLimit")==="1";
+/* 前に出た問題のID（新しい順に200件まで） */
+function loadSeen(key){try{return JSON.parse(store.get(key)||"[]")}catch(e){return[]}}
+function addSeen(key,id){const a=loadSeen(key).filter(x=>x!==id);a.unshift(id);store.set(key,JSON.stringify(a.slice(0,200)))}
 const lockedToday=()=>store.get("lastDate")===today()&&!noLimit();
 
 /* =====================================================================
@@ -412,7 +424,7 @@ function deal(){
   const first=store.get("firstDone")!=="1";
   store.set("lastDate",today());
   run={id:rid(8),startedAt:nowStr(),date:today(),nick,pref,version:DATA.version,first,test:noLimit(),
-       items:pickDiagnosis(DATA.questions).map(q=>({q,order:shuffle([0,1,2,3])})),answers:[],i:0,shownAt:null};
+       items:pickDiagnosis(DATA.questions,new Set(loadSeen("seen"))).map(q=>({q,order:shuffle([0,1,2,3])})),answers:[],i:0,shownAt:null};
   saveProgress();
   next();
 }
@@ -437,10 +449,25 @@ function introScreen(cat){
   focusFirst("#begin");
 }
 
+/* 選択肢に○×の色と「正解」「最適 3点」「次善 1点」の札を付け、ひとことを返す（解説は出さない） */
+function markAnswer(q,it,d){
+  const mx=Math.max(...q.points),play=q.category==="プレー判断";
+  app.querySelectorAll(".opt").forEach(b=>{
+    const p=q.points[it.order[+b.dataset.d]];b.disabled=true;
+    if(p===mx)b.classList.add("ok");else if(p>0)b.classList.add("so");
+    if(+b.dataset.d===d){b.classList.add("pick");if(p===0)b.classList.add("ng")}
+    const tag=p===mx?(play?"最適 3点":"正解"):p>0?`次善 ${p}点`:"";
+    if(tag)b.insertAdjacentHTML("beforeend",`<span class="tag">${tag}</span>`);
+  });
+  if(d===null)return{t:"時間切れ！",c:"n"};
+  const got=q.points[it.order[d]];
+  return got===mx?{t:play?"◎ 最適！ ＋3点":"○ 正解！",c:"g"}:got>0?{t:`△ 次善 ＋${got}点`,c:"m"}:{t:"× ざんねん",c:"n"};
+}
+
 function qScreen(){
   app.dataset.view="q";
   const it=run.items[run.i],q=it.q,cls=CATS[q.category].cls,lim=CFG.seconds[q.category]*1000;
-  if(!run.shownAt){run.shownAt=Date.now();saveProgress()}
+  if(!run.shownAt){run.shownAt=Date.now();saveProgress();addSeen("seen",q.id)}
   const already=Math.max(0,Date.now()-run.shownAt);
   if(already>=lim){                                   // 閉じている間に制限時間を過ぎた → 時間切れ
     run.answers.push({choice:null,shown:null,ms:lim,pts:0,timeout:true});
@@ -455,7 +482,7 @@ function qScreen(){
    ${showSit(q.situation)?`<p class="sit">${esc(q.situation)}</p>`:""}
    <p class="qt">${esc(q.text)}</p>
    <div class="opts">${it.order.map((o,d)=>`<button class="opt" data-d="${d}">${LABEL[d]} ${esc(q.choices[o])}</button>`).join("")}</div>
-   <p class="timeup" id="tu" aria-live="assertive"></p></div>`;
+   <p class="fbk" id="tu" aria-live="assertive"></p></div>`;
   if(hasDiagram(q))document.getElementById("fb").appendChild(drawField(q));
   window.scrollTo(0,0);
   const t0=performance.now()-already,tb=document.getElementById("tb"),ts=document.getElementById("ts");
@@ -469,9 +496,9 @@ function qScreen(){
     const ms=Math.min(lim,Math.round(performance.now()-t0)),orig=d===null?null:it.order[d];
     run.answers.push({choice:orig,shown:d,ms,pts:orig===null?0:q.points[orig],timeout:d===null});
     run.i++;run.shownAt=null;saveProgress();
-    app.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(+b.dataset.d===d)b.classList.add("pick")});
-    if(d===null)document.getElementById("tu").textContent="時間切れ！";
-    setTimeout(next,d===null?900:300);
+    const f=markAnswer(q,it,d),tu=document.getElementById("tu");
+    tu.textContent=f.t;tu.className="fbk "+f.c;
+    setTimeout(next,d===null?1500:1300);
   }
   app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.d));
   clearInterval(timer);timer=setInterval(tick,100);tick();
