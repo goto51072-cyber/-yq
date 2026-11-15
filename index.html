@@ -156,7 +156,8 @@ const CFG={
   weight:{"易":1,"中":1.5,"難":2},                 // 難易度の重み
   seconds:{"歴史":20,"ルール":30,"プレー判断":40}, // 制限時間（ルールは図を見るので30秒）
   diagUses:["診断・練習","診断（1問まで）・練習"],   // 「練習のみ」は出さない
-  localUse:"診断（1問まで）・練習",                // 地元クイズ：1回1問まで、約3割（全体を1問ぶんとして抽選）
+  localUse:"診断（1問まで）・練習",                // 地元クイズ：1回1問まで
+  localRate:.3,                                    // 地元クイズが入る割合（約3割。問題が増えても変わらない）
   yq:{center:.55,step:.18,per:15,min:55,max:145}   // 暫定YQ：55%＝100、18ポイントごとに±15
 };
 const CATS={"歴史":{cls:"hist",color:"var(--hist)",desc:"大会の記録や歴代の名勝負から出題。"},
@@ -179,9 +180,13 @@ function pickDiagnosis(all,seen){
     const need=CFG.slots[lv],cand=pool.filter(q=>q.category===cat&&q.level===lv);
     const normal=cand.filter(q=>q.use!==CFG.localUse),local=cand.filter(q=>q.use===CFG.localUse);
     const localFresh=local.filter(fresh);
-    // 地元クイズはまとめて「1問ぶん」の札にして混ぜる（3枠なら約3割で1問入る）
-    const cards=[...normal.map(q=>({q,old:!fresh(q)})),...(local.length?[{local:true,old:!localFresh.length}]:[])];
-    const deck=[...shuffle(cards.filter(c=>!c.old)),...shuffle(cards.filter(c=>c.old))];
+    // 地元クイズは約3割の確率で「1問ぶん」の札を入れる（まだ見ていない地元クイズがあれば最初に）
+    const cards=normal.map(q=>({q,old:!fresh(q)}));
+    const newer=shuffle(cards.filter(c=>!c.old)),older=shuffle(cards.filter(c=>c.old));
+    if(local.length&&Math.random()<CFG.localRate){
+      if(localFresh.length)newer.unshift({local:true});else older.splice(Math.floor(Math.random()*(older.length+1)),0,{local:true});
+    }
+    const deck=[...newer,...older];
     const picked=[];
     for(const card of deck){
       if(picked.length===need)break;
