@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow"><!-- 本番公開までは検索エンジンに載せない -->
-<title>高校野球YQ 診断（開発版）</title>
+<title>野球IQ診断（開発版）</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800;900&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
@@ -403,7 +403,7 @@ function startScreen(){
   const prevNick=store.get("nick")||"",prevPref=store.get("pref")||"";
   const done=resume?resume.answers.length:0;
   app.innerHTML=`<div class="screen">
-   <div class="hero">${heroSVG()}<div class="ttl"><h1><small>HIGH SCHOOL BASEBALL</small><br>高校野球 <span class="hy">YQ</span>診断</h1><p>あなたの「野球の頭」を数値で測ります</p></div></div>
+   <div class="hero">${heroSVG()}<div class="ttl"><h1><small>HIGH SCHOOL BASEBALL</small><br>野球<span class="hy">IQ</span>診断</h1><p>あなたの「野球の頭」を数値で測ります</p></div></div>
    <div class="rules">${CFG.order.map(c=>`<div><b>${CFG.seconds[c]}秒</b>${c}</div>`).join("")}</div>
    ${resume?`<p class="notice">途中の診断があります${done?`（${done}問まで解答済み）`:""}。続きから再開できます。表示中だった問題は、閉じていた時間も制限時間に数えます。</p>`:`
    <div><label class="lbl" for="nick">ニックネーム（任意・結果画面にだけ表示）</label><input id="nick" maxlength="12" placeholder="例：ショートの鬼" value="${esc(prevNick)}" autocomplete="off"></div>
@@ -585,7 +585,7 @@ function renderRanks(r,s){
   if(r.pref){
     const f=(s.prefs||[]).find(x=>x.name===r.pref),n=f?f.n:0;
     pref.innerHTML=n<s.prefGoal||!f.rank?`<b>${esc(r.pref)}の順位</b>あと<em>${s.prefGoal-n}</em>人で公開`
-      :`<b>${esc(r.pref)}の順位</b><em>${f.rank}</em>位／${s.prefRanked}県<br>平均YQ ${f.avg}（${n}人）`;
+      :`<b>${esc(r.pref)}の順位</b><em>${f.rank}</em>位／${s.prefRanked}県<br>平均 野球IQ ${f.avg}（${n}人）`;
   }
 }
 
@@ -604,12 +604,12 @@ function resultScreen(r,fresh){
      <div style="display:grid;gap:8px">${rows.map(({it,i})=>reviewItem(it,r.answers[i],i)).join("")}</div>`;
   }).join("");
   app.innerHTML=`<div class="screen">
-   <div class="yq"><div class="k">${r.nick?esc(r.nick)+" の ":""}YQ</div><div class="v">${yq}</div>
+   <div class="yq"><div class="k">${r.nick?esc(r.nick)+" の ":""}野球IQ</div><div class="v">${yq}</div>
      <div class="c">${catchCopy(yq)}</div>
-     <div class="r">${conv?`初回受験${STATS.conv.n}人のデータで換算したYQ`:"暫定値（受験者が100人に達したら正式な値に更新）"}</div></div>
+     <div class="r">${conv?`初回受験${STATS.conv.n}人のデータで換算した野球IQ`:"暫定値（受験者が100人に達したら正式な値に更新）"}</div></div>
    <div class="rank"><div id="rk-nat"><b>全国の順位</b>${wait}</div>${prefBox}</div>
    ${r.test||!r.first?`<p class="tiny">${r.test?"テスト受験":"2回目以降の受験"}は、順位の人数には数えません。</p>`:""}
-   <div class="bars">${CFG.order.map(c=>{const v=sc.rate[c];return `<div class="bar"><span>${c}</span><div class="track"><div class="fill" style="width:${v*100}%;background:${CATS[c].color}"></div></div><span class="num">${Math.round(v*100)}%</span><span class="yqn">YQ ${toYQ(v,convOf(c))}</span></div>`}).join("")}</div>
+   <div class="bars">${CFG.order.map(c=>{const v=sc.rate[c];return `<div class="bar"><span>${c}</span><div class="track"><div class="fill" style="width:${v*100}%;background:${CATS[c].color}"></div></div><span class="num">${Math.round(v*100)}%</span><span class="yqn">IQ ${toYQ(v,convOf(c))}</span></div>`}).join("")}</div>
    <p class="tiny">得点率は難易度の重み（易1・中1.5・難2）をかけたもの。合計時間 ${Math.floor(total/60)}分${total%60}秒${r.test?"・テスト受験":""}</p>
    <h2 class="sec" style="font-size:17px">解説</h2>
    ${review}
@@ -680,7 +680,7 @@ function bindReviewDiagrams(root,itemOf){
 }
 
 /* =====================================================================
-   練習モード（何回でも。1問ごとに正解と解説。記録は送らず、YQにも入れない）
+   練習モード（何回でも。1問ごとに正解と解説。記録は送らず、野球IQにも入れない）
    ===================================================================== */
 const PCFG={cats:["すべて",...CFG.order],levels:["すべて","易","中","難"],counts:[5,10,20]};
 let prac=null;
@@ -705,7 +705,7 @@ function practiceSetup(){
   const chips=(k,vals,fmt)=>`<div class="chips" role="group">${vals.map(v=>`<button type="button" class="chip" data-k="${k}" data-v="${v}" aria-pressed="${String(v)===String(o[k])}">${fmt?fmt(v):v}</button>`).join("")}</div>`;
   app.innerHTML=`<div class="screen">
    <h2 class="ptitle">練習モード</h2>
-   <p class="tiny">何回でも解けます。答えるたびに正解と解説が出ます。練習の成績はYQには入りません。</p>
+   <p class="tiny">何回でも解けます。答えるたびに正解と解説が出ます。練習の成績は野球IQには入りません。</p>
    <div><span class="lbl">分野</span>${chips("cat",PCFG.cats)}</div>
    <div><span class="lbl">難易度</span>${chips("level",PCFG.levels)}</div>
    <div><span class="lbl">問題数</span>${chips("count",PCFG.counts,v=>v+"問")}</div>
@@ -775,7 +775,7 @@ function practiceResult(){
   const right=prac.answers.filter((a,i)=>a.pts===best(i)).length;
   app.innerHTML=`<div class="screen">
    <div class="yq"><div class="k">練習の結果</div><div class="v" style="font-size:60px">${right}<span style="font-size:24px"> / ${n}問</span></div>
-     <div class="r">正解（プレー判断は最適）の数。練習の成績はYQには入りません</div></div>
+     <div class="r">正解（プレー判断は最適）の数。練習の成績は野球IQには入りません</div></div>
    <h2 class="sec" style="font-size:17px">ふりかえり</h2>
    <div style="display:grid;gap:8px">${prac.items.map((it,i)=>reviewItem(it,prac.answers[i],i)).join("")}</div>
    <div style="display:grid;gap:8px;margin-top:8px">
