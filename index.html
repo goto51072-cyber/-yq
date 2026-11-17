@@ -176,21 +176,23 @@ function pickDiagnosis(all,seen){
   const pool=all.filter(q=>CFG.diagUses.includes(q.use));
   const usedGroups=new Set(),out=[];
   const ok=q=>!q.group||!usedGroups.has(q.group),fresh=q=>!seen.has(q.id);
+  // 地元クイズは診断全体で1回だけ抽選（約3割）。当たったら、まだ見ていない地元クイズを優先して1問決める。
+  // 地元クイズは難易度がばらばら（中・難）なので、決めた問題の分野・難易度の枠に「1問ぶん」の札として入れる
+  const locals=pool.filter(q=>q.use===CFG.localUse),localsFresh=locals.filter(fresh);
+  const localPick=locals.length&&Math.random()<CFG.localRate?sample(localsFresh.length?localsFresh:locals):null;
   for(const cat of CFG.order)for(const lv of CFG.levels){
     const need=CFG.slots[lv],cand=pool.filter(q=>q.category===cat&&q.level===lv);
-    const normal=cand.filter(q=>q.use!==CFG.localUse),local=cand.filter(q=>q.use===CFG.localUse);
-    const localFresh=local.filter(fresh);
-    // 地元クイズは約3割の確率で「1問ぶん」の札を入れる（まだ見ていない地元クイズがあれば最初に）
+    const normal=cand.filter(q=>q.use!==CFG.localUse);
     const cards=normal.map(q=>({q,old:!fresh(q)}));
     const newer=shuffle(cards.filter(c=>!c.old)),older=shuffle(cards.filter(c=>c.old));
-    if(local.length&&Math.random()<CFG.localRate){
-      if(localFresh.length)newer.unshift({local:true});else older.splice(Math.floor(Math.random()*(older.length+1)),0,{local:true});
+    if(localPick&&localPick.category===cat&&localPick.level===lv){
+      if(fresh(localPick))newer.unshift({local:true});else older.splice(Math.floor(Math.random()*(older.length+1)),0,{local:true});
     }
     const deck=[...newer,...older];
     const picked=[];
     for(const card of deck){
       if(picked.length===need)break;
-      const q=card.local?(sample(localFresh.filter(ok))||sample(local.filter(ok))):card.q;
+      const q=card.local?localPick:card.q;
       if(!q||!ok(q))continue;
       picked.push(q);if(q.group)usedGroups.add(q.group);
     }
