@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow"><!-- 本番公開までは検索エンジンに載せない -->
 <title>野球IQ診断（開発版）</title>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800;900&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
 <style>
@@ -132,6 +133,17 @@ details .body .ans{background:var(--soft);border-radius:8px;padding:6px 8px}
 .demo{max-width:420px;margin:12px auto 0;font-size:12px;color:var(--ink);background:rgba(255,255,255,.88);border-radius:10px;padding:8px 10px;display:grid;gap:6px}
 .demo label{display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer}
 .demo input{width:auto}
+/* キャラクター（KOZO・審判）の絵 */
+.chara{display:block;width:auto;max-width:100%;object-fit:contain}
+.hero .kozo{position:absolute;right:2%;bottom:0;height:52%;filter:drop-shadow(0 3px 0 rgba(22,48,79,.35))}
+.fbk{display:flex;align-items:center;justify-content:center;gap:6px}
+.fbk .chara{height:84px;animation:pop .35s ease-out}
+@keyframes pop{0%{transform:scale(.4) translateY(12px);opacity:0}70%{transform:scale(1.08)}100%{transform:none;opacity:1}}
+.yq .pic{height:132px;margin:6px auto 4px;filter:drop-shadow(0 4px 0 rgba(0,0,0,.25))}
+.intro .pic{height:150px}
+.withpic{display:flex;align-items:center;gap:10px}
+.withpic .chara{height:64px;flex:none}
+.loading .chara{height:120px;margin:0 auto 8px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -222,6 +234,22 @@ function catchCopy(yq){
 /* 解説の中の問題ID（例：「（H-007）」）は表示するときに消す */
 function stripIds(s){return String(s||"").replace(/\s*[（(]\s*[RPH]-\d{3}\s*[）)]/g,"").replace(/[RPH]-\d{3}/g,"")}
 /*LOGIC-END*/
+
+/* =====================================================================
+   キャラクターの絵（img/ フォルダの webp）。結果の4段階は catchCopy と同じ区切り
+   ===================================================================== */
+const CHARAS=["kozo_batting","kozo_correct","kozo_wrong","kozo_timeup","kozo_sleep","kozo_error","kozo_thanks",
+  "kozo_rank1","kozo_rank2","kozo_rank3","kozo_rank4","umpire_base","umpire_safe","umpire_out"];
+function chara(n,cls){return `<img class="chara${cls?" "+cls:""}" src="img/${n}.webp" alt="" decoding="async">`}
+function rankPic(yq){return yq>=130?"kozo_rank4":yq>=115?"kozo_rank3":yq>=100?"kozo_rank2":"kozo_rank1"}
+/* 答えた直後の絵：ルールは審判（セーフ／アウト）、ほかはKOZO。時間切れはどの分野もKOZO */
+function feedbackPic(cat,c,timeout){
+  if(timeout)return "kozo_timeup";
+  if(cat==="ルール")return c==="n"?"umpire_out":"umpire_safe";
+  return c==="g"?"kozo_correct":c==="m"?"kozo_rank2":"kozo_wrong";
+}
+/* 答えた直後に絵がすぐ出るよう、先に読み込んでおく */
+function preloadCharas(){CHARAS.forEach(n=>{const i=new Image();i.src=`img/${n}.webp`})}
 
 /* =====================================================================
    端末に残すもの（ログインなし。1日1回と初回の判定だけ）
@@ -405,13 +433,13 @@ function startScreen(){
   const prevNick=store.get("nick")||"",prevPref=store.get("pref")||"";
   const done=resume?resume.answers.length:0;
   app.innerHTML=`<div class="screen">
-   <div class="hero">${heroSVG()}<div class="ttl"><h1><small>HIGH SCHOOL BASEBALL</small><br>野球<span class="hy">IQ</span>診断</h1><p>あなたの「野球の頭」を数値で測ります</p></div></div>
+   <div class="hero">${heroSVG()}${chara("kozo_batting","kozo")}<div class="ttl"><h1><small>HIGH SCHOOL BASEBALL</small><br>野球<span class="hy">IQ</span>診断</h1><p>あなたの「野球の頭」を数値で測ります</p></div></div>
    <div class="rules">${CFG.order.map(c=>`<div><b>${CFG.seconds[c]}秒</b>${c}</div>`).join("")}</div>
    ${resume?`<p class="notice">途中の診断があります${done?`（${done}問まで解答済み）`:""}。続きから再開できます。表示中だった問題は、閉じていた時間も制限時間に数えます。</p>`:`
    <div><label class="lbl" for="nick">ニックネーム（任意・結果画面にだけ表示）</label><input id="nick" maxlength="12" placeholder="例：ショートの鬼" value="${esc(prevNick)}" autocomplete="off"></div>
    <div><label class="lbl" for="pref">都道府県（任意・県対抗ランキング用）</label><select id="pref"><option value="">選ばない</option>${PREFS.map(p=>`<option${p===prevPref?" selected":""}>${p}</option>`).join("")}</select></div>
    <p class="tiny">全30問（3分野×10問）。本名や学校名は入れないでください。正解と解説は、最後にまとめて表示されます。診断は1日1回で、途中で閉じても同じ日なら続きから再開できます。</p>`}
-   ${locked?`<p class="notice">今日の診断は受験済みです。また明日どうぞ。</p>`:""}
+   ${locked?`<p class="notice withpic">${chara("kozo_sleep")}<span>今日の診断は受験済みです。また明日どうぞ。</span></p>`:""}
    <div style="display:grid;gap:10px;margin-top:auto">
      ${resume?`<button class="btn" id="resume">続きから（${Math.min(done+1,30)}問目から）</button>
        ${noLimit()?`<button class="btn sub" id="restart">テスト：最初からやり直す</button>`:""}`
@@ -460,6 +488,7 @@ function introScreen(cat){
   clearInterval(timer);app.dataset.view="intro";
   const n=run.items.filter(it=>it.q.category===cat).length,idx=CFG.order.indexOf(cat)+1;
   app.innerHTML=`<div class="screen"><div class="intro">
+    ${chara({"ルール":"umpire_base","プレー判断":"kozo_rank2","歴史":"kozo_thanks"}[cat],"pic")}
     <div class="no">第${idx}章／全3章</div>
     <h2 class="bg-${CATS[cat].cls}">${cat}</h2>
     <div class="facts"><span>${n}問</span><span>1問${CFG.seconds[cat]}秒</span><span>易→中→難</span></div>
@@ -516,7 +545,7 @@ function qScreen(){
     run.answers.push({choice:orig,shown:d,ms,pts:orig===null?0:q.points[orig],timeout:d===null});
     run.i++;run.shownAt=null;saveProgress();
     const f=markAnswer(q,it,d),tu=document.getElementById("tu");
-    tu.textContent=f.t;tu.className="fbk "+f.c;
+    tu.innerHTML=chara(feedbackPic(q.category,f.c,d===null))+`<span>${f.t}</span>`;tu.className="fbk "+f.c;
     setTimeout(next,d===null?1500:1300);
   }
   app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.d));
@@ -531,6 +560,7 @@ function finish(){
   const st=document.getElementById("sendst"),sc=scoreRun(r.items,r.answers);
   st.textContent=SEND_MSG[CFG.gasUrl?"sending":"off"];
   sendOrQueue(buildRecord(r,sc,toYQ(sc.p,convOf())),k=>{st.textContent=SEND_MSG[k];
+    if(k==="queued"){st.classList.add("withpic");st.insertAdjacentHTML("afterbegin",chara("kozo_error"))}
     if(CFG.gasUrl)fetchStats(sc.p).then(s=>renderRanks(r,s)).catch(()=>renderRanks(r,null))});
 }
 function saveLastRun(r){
@@ -606,7 +636,7 @@ function resultScreen(r,fresh){
      <div style="display:grid;gap:8px">${rows.map(({it,i})=>reviewItem(it,r.answers[i],i)).join("")}</div>`;
   }).join("");
   app.innerHTML=`<div class="screen">
-   <div class="yq"><div class="k">${r.nick?esc(r.nick)+" の ":""}野球IQ</div><div class="v">${yq}</div>
+   <div class="yq">${chara(rankPic(yq),"pic")}<div class="k">${r.nick?esc(r.nick)+" の ":""}野球IQ</div><div class="v">${yq}</div>
      <div class="c">${catchCopy(yq)}</div>
      <div class="r">${conv?`初回受験${STATS.conv.n}人のデータで換算した野球IQ`:"暫定値（受験者が100人に達したら正式な値に更新）"}</div></div>
    <div class="rank"><div id="rk-nat"><b>全国の順位</b>${wait}</div>${prefBox}</div>
@@ -671,7 +701,8 @@ function bindObjForms(root,qOf,attemptId){
       "コメント":f.querySelector("textarea").value.trim(),"受験ID":attemptId||""}};
     btn.disabled=true;st.textContent=CFG.gasUrl?"送っています…":"";
     sendOrQueue(payload,k=>{st.textContent=k==="ok"?"受け付けました。確認して、必要なら問題を直します。ありがとうございます！"
-      :k==="queued"?"送れませんでした。次に開いたときに自動で送ります":"開発版のため送信されません（送り先のURLが未設定）"});
+      :k==="queued"?"送れませんでした。次に開いたときに自動で送ります":"開発版のため送信されません（送り先のURLが未設定）";
+      if(k==="ok"||k==="queued"){st.classList.add("withpic");st.insertAdjacentHTML("afterbegin",chara(k==="ok"?"kozo_thanks":"kozo_error"))}});
   });
 }
 /* 解説の一覧で、開いたときに図を描く */
@@ -753,7 +784,8 @@ function pqScreen(){
     if(done)return;done=true;clearInterval(timer);
     const orig=d===null?null:it.order[d];
     prac.answers.push({choice:orig,shown:d,ms:Math.round(performance.now()-t0),pts:orig===null?0:q.points[orig],timeout:d===null});
-    const f=markAnswer(q,it,d),tu=document.getElementById("tu");tu.textContent=f.t;tu.className="fbk "+f.c;
+    const f=markAnswer(q,it,d),tu=document.getElementById("tu");
+    tu.innerHTML=chara(feedbackPic(q.category,f.c,d===null))+`<span>${f.t}</span>`;tu.className="fbk "+f.c;
     const box=document.getElementById("pexp");
     box.innerHTML=`<div class="expl"><b>解説</b><p>${esc(stripIds(q.explanation))}</p>${objFormHTML(prac.i)}</div>
       <button class="btn" id="pnext" style="margin-top:12px">${last?"結果を見る":"次の問題へ"}</button>`;
@@ -798,10 +830,10 @@ const nl=document.getElementById("nolimit");
 nl.checked=noLimit();
 nl.onchange=()=>{store.set("noLimit",nl.checked?"1":"0");if(app.dataset.view==="start")startScreen()};
 fetch(CFG.dataUrl,{cache:"no-cache"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
-  DATA=d;flushQueue();fetchStats().catch(()=>{});
+  DATA=d;flushQueue();fetchStats().catch(()=>{});preloadCharas();
   document.getElementById("devinfo").textContent=`開発版（段階4：練習モード）・問題データ ${d.version}（${d.questions.length}問、${d.exported}書き出し）。${CFG.gasUrl?"記録と異議はスプレッドシートに送ります。順位はまだ表示しません。":"記録・異議の送り先が未設定のため、送信はしません。"}絵柄・球場のイラストはこのアプリ用のオリジナルです。`;
   startScreen();
-}).catch(()=>{app.innerHTML=`<div class="loading">問題データを読み込めませんでした。<br>通信状態を確かめて、もう一度開いてください。</div>`});
+}).catch(()=>{app.innerHTML=`<div class="loading"><div>${chara("kozo_error")}問題データを読み込めませんでした。<br>通信状態を確かめて、もう一度開いてください。</div></div>`});
 </script>
 </body>
 </html>
