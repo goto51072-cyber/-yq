@@ -238,15 +238,20 @@ function stripIds(s){return String(s||"").replace(/\s*[（(]\s*[RPH]-\d{3}\s*[�
 /* =====================================================================
    キャラクターの絵（img/ フォルダの webp）。結果の4段階は catchCopy と同じ区切り
    ===================================================================== */
-const CHARAS=["kozo_batting","kozo_correct","kozo_wrong","kozo_timeup","kozo_sleep","kozo_error","kozo_thanks",
-  "kozo_rank1","kozo_rank2","kozo_rank3","kozo_rank4","umpire_base","umpire_safe","umpire_out"];
+const CHARAS=["kozo_batting","kozo_timeup","kozo_sleep","kozo_error","kozo_thanks",
+  "kozo_rank1","kozo_rank2","kozo_rank3","kozo_rank4","umpire_base","umpire_safe","umpire_out",
+  "coach_sign","coach_good","coach_soso","coach_angry","hakase_intro","hakase_good","hakase_wrong"];
+/* 分野ごとの担当：章の扉の絵と、答えた直後の絵（正解 g／次善 m／不正解 n） */
+const HOSTS={
+  "歴史":{intro:"hakase_intro",g:"hakase_good",m:"hakase_good",n:"hakase_wrong"},
+  "ルール":{intro:"umpire_base",g:"umpire_safe",m:"umpire_safe",n:"umpire_out"},
+  "プレー判断":{intro:"coach_sign",g:"coach_good",m:"coach_soso",n:"coach_angry"}};
 function chara(n,cls){return `<img class="chara${cls?" "+cls:""}" src="img/${n}.webp" alt="" decoding="async">`}
 function rankPic(yq){return yq>=130?"kozo_rank4":yq>=115?"kozo_rank3":yq>=100?"kozo_rank2":"kozo_rank1"}
-/* 答えた直後の絵：ルールは審判（セーフ／アウト）、ほかはKOZO。時間切れはどの分野もKOZO */
+/* 答えた直後の絵：歴史は博士、ルールは審判、プレー判断は監督。時間切れはどの分野もKOZO */
 function feedbackPic(cat,c,timeout){
   if(timeout)return "kozo_timeup";
-  if(cat==="ルール")return c==="n"?"umpire_out":"umpire_safe";
-  return c==="g"?"kozo_correct":c==="m"?"kozo_rank2":"kozo_wrong";
+  const h=HOSTS[cat];return h?h[c]:c==="n"?"kozo_wrong":"kozo_correct";
 }
 /* 答えた直後に絵がすぐ出るよう、先に読み込んでおく */
 function preloadCharas(){CHARAS.forEach(n=>{const i=new Image();i.src=`img/${n}.webp`})}
@@ -488,7 +493,7 @@ function introScreen(cat){
   clearInterval(timer);app.dataset.view="intro";
   const n=run.items.filter(it=>it.q.category===cat).length,idx=CFG.order.indexOf(cat)+1;
   app.innerHTML=`<div class="screen"><div class="intro">
-    ${chara({"ルール":"umpire_base","プレー判断":"kozo_rank2","歴史":"kozo_thanks"}[cat],"pic")}
+    ${HOSTS[cat]?chara(HOSTS[cat].intro,"pic"):""}
     <div class="no">第${idx}章／全3章</div>
     <h2 class="bg-${CATS[cat].cls}">${cat}</h2>
     <div class="facts"><span>${n}問</span><span>1問${CFG.seconds[cat]}秒</span><span>易→中→難</span></div>
